@@ -142,6 +142,50 @@ before_show_menu() {
     show_menu
 }
 
+check_firewall_ports() {
+    local need_open=0
+    local close_cmds=""
+    # 检查ufw是否安装并启用
+    if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
+        for port in 80 443; do
+            if ! ufw status | grep -qw "$port"; then
+                ufw allow $port
+                need_open=1
+                close_cmds+="ufw delete allow $port\n"
+            fi
+        done
+        if [[ $need_open -eq 1 ]]; then
+            echo -e "${green}防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
+        fi
+    fi
+    # firewalld
+    if command -v firewall-cmd &>/dev/null && firewall-cmd --state &>/dev/null; then
+        for port in 80 443; do
+            if ! firewall-cmd --list-ports | grep -qw "${port}/tcp"; then
+                firewall-cmd --permanent --add-port=${port}/tcp
+                firewall-cmd --reload
+                need_open=1
+                close_cmds+="firewall-cmd --permanent --remove-port=${port}/tcp && firewall-cmd --reload\n"
+            fi
+        done
+        if [[ $need_open -eq 1 ]]; then
+            echo -e "${green}防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
+        fi
+    fi
+}
+
+check_port_occupied() {
+    for port in 80 443; do
+        local pinfo
+        pinfo=$(lsof -i :$port -sTCP:LISTEN 2>/dev/null | grep -v "COMMAND")
+        if [[ -n "$pinfo" ]]; then
+            echo -e "${red}端口${port}已被占用，相关进程如下：${plain}"
+            echo "$pinfo"
+            exit 1
+        fi
+    done
+}
+
 install() {
     # 新增：提示用户输入域名和邮箱
     echo -e "${yellow}请输入用于申请证书的域名（如 example.com）：${plain}"
@@ -181,11 +225,21 @@ install() {
     # 配置 x-ui 面板证书
     /usr/local/x-ui/x-ui cert -webCert "$cert_dir/fullchain.pem" -webCertKey "$cert_dir/privkey.pem"
 
+    # 自动写入订阅证书路径到数据库
+    /usr/local/x-ui/x-ui setting -subCertFile "$cert_dir/fullchain.pem" -subKeyFile "$cert_dir/privkey.pem"
+
+    # 自动续期功能：设置acme.sh自动续期（每2个月执行一次）
+    if ! crontab -l 2>/dev/null | grep -q 'acme.sh --cron'; then
+        # 每2个月1号凌晨3点自动续期
+        (crontab -l 2>/dev/null; echo "0 3 1 */2 * ~/.acme.sh/acme.sh --cron --home ~/.acme.sh > /dev/null") | crontab -
+        LOGI "已设置acme.sh自动续期定时任务（每2个月1号凌晨3点自动续期）"
+    fi
+
     # 安装并配置 nginx 伪装站点
     install_nginx_with_cert "$install_domain" "$cert_dir/fullchain.pem" "$cert_dir/privkey.pem"
 
-    # 原有安装流程
-    bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/install.sh)
+    # 原有安装流程 bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/install.sh)
+    bash <(curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/main/install.sh)
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
             start
@@ -193,6 +247,13 @@ install() {
             start 0
         fi
     fi
+
+    # 安装完成后输出客户端下载地址
+    echo -e "${green}客户端下载地址：${plain}"
+    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg"
+    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage"
+    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z"
+    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk"
 }
 
 # 新增：自动安装并配置 nginx
@@ -224,15 +285,15 @@ install_nginx_with_cert() {
     fi
 
     # 生成伪装站点配置
-    generate_fake_site "$domain"
+    generate_default_site "$domain"
 
     # 配置 nginx 监听 80/443
-    cat >/etc/nginx/conf.d/fake_site.conf <<EOF
+    cat >/etc/nginx/conf.d/default_site.conf <<EOF
 server {
     listen 80;
     server_name $domain;
     location / {
-        root /var/www/fake_site;
+        root /var/www/default_site;
         index index.html;
     }
 }
@@ -244,7 +305,7 @@ server {
     ssl_protocols       TLSv1.2 TLSv1.3;
     ssl_ciphers         HIGH:!aNULL:!MD5;
     location / {
-        root /var/www/fake_site;
+        root /var/www/default_site;
         index index.html;
     }
     # 可选：反向代理到其他网站
@@ -264,15 +325,29 @@ server {
 EOF
 
     # 启动 nginx
-    mkdir -p /var/www/fake_site
+    mkdir -p /var/www/default_site
     systemctl enable nginx
     systemctl restart nginx
 }
 
-# 新增：生成简单静态网页
-generate_fake_site() {
+# 新增：生成默认站点，优先下载web.zip
+generate_default_site() {
     local domain="$1"
-    cat >/var/www/fake_site/index.html <<EOF
+    local site_dir="/var/www/default_site"
+    mkdir -p "$site_dir"
+    local webzip_url="https://github.com/dmulxw/3x-ui/releases/download/trojan/web.zip"
+    if curl --head --silent --fail "$webzip_url" >/dev/null; then
+        tmpzip="/tmp/web.zip"
+        curl -Lso "$tmpzip" "$webzip_url"
+        if command -v unzip &>/dev/null; then
+            unzip -o "$tmpzip" -d "$site_dir"
+        else
+            apt-get update && apt-get install -y unzip || yum install -y unzip
+            unzip -o "$tmpzip" -d "$site_dir"
+        fi
+        rm -f "$tmpzip"
+    else
+        cat >"$site_dir/index.html" <<EOF
 <!DOCTYPE html>
 <html>
 <head>
@@ -281,10 +356,11 @@ generate_fake_site() {
 </head>
 <body>
     <h1>Welcome to $domain</h1>
-    <p>This is a fake site for camouflage.</p>
+    <p>This is a default site for camouflage.</p>
 </body>
 </html>
 EOF
+    fi
 }
 
 update() {
@@ -296,7 +372,7 @@ update() {
         fi
         return 0
     fi
-    bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/install.sh)
+    bash <(curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/main/install.sh)
     if [[ $? == 0 ]]; then
         LOGI "Update is complete, Panel has automatically restarted "
         before_show_menu
@@ -314,7 +390,7 @@ update_menu() {
         return 0
     fi
 
-    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/MHSanaei/3x-ui/main/x-ui.sh
+    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/dmulxw/3x-ui/main/x-ui.sh
     chmod +x /usr/local/x-ui/x-ui.sh
     chmod +x /usr/bin/x-ui
 
@@ -336,7 +412,7 @@ legacy_version() {
         exit 1
     fi
     # Use the entered panel version in the download link
-    install_command="bash <(curl -Ls "https://raw.githubusercontent.com/mhsanaei/3x-ui/v$tag_version/install.sh") v$tag_version"
+    install_command="bash <(curl -Ls \"https://raw.githubusercontent.com/dmulxw/3x-ui/v\$tag_version/install.sh\") v\$tag_version"
 
     echo "Downloading and installing panel version $tag_version..."
     eval $install_command
@@ -367,7 +443,7 @@ uninstall() {
     echo ""
     echo -e "Uninstalled Successfully.\n"
     echo "If you need to install this panel again, you can use below command:"
-    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)${plain}"
+    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh)${plain}"
     echo ""
     # Trap the SIGTERM signal
     trap delete_script SIGTERM
@@ -709,7 +785,7 @@ enable_bbr() {
 }
 
 update_shell() {
-    wget -O /usr/bin/x-ui -N --no-check-certificate https://github.com/MHSanaei/3x-ui/raw/main/x-ui.sh
+    wget -O /usr/bin/x-ui -N --no-check-certificate https://github.com/dmulxw/3x-ui/raw/main/x-ui.sh
     if [[ $? != 0 ]]; then
         echo ""
         LOGE "Failed to download script, Please check whether the machine can connect Github"
@@ -1660,6 +1736,7 @@ install_iplimit() {
         ubuntu)
             if [[ "${os_version}" -ge 24 ]]; then
                 apt update && apt install python3-pip -y
+               
                 python3 -m pip install pyasynchat --break-system-packages
             fi
             apt update && apt install fail2ban -y
@@ -1754,6 +1831,7 @@ remove_iplimit() {
             ;;
         fedora | amzn)
             dnf remove fail2ban -y
+
             dnf autoremove -y
             ;;
         arch | manjaro | parch)
@@ -1773,14 +1851,82 @@ remove_iplimit() {
     *)
         echo -e "${red}Invalid option. Please select a valid number.${plain}\n"
         remove_iplimit
-        ;
-│  ${green}23.${plain} Enable BBR                                │
-│  ${green}24.${plain} Update Geo Files                          │
-│  ${green}25.${plain} Speedtest by Ookla                        │
-╚────────────────────────────────────────────────╝
+        ;;
+    esac
+}
+
+update_geo_ip() {
+    # Define the URL for the geo IP database
+    local geo_ip_url="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+    local geo_site_url="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+
+    # Download the latest geo IP database
+    wget -N --no-check-certificate -O /usr/local/x-ui/bin/geoip.dat $geo_ip_url
+    wget -N --no-check-certificate -O /usr/local/x-ui/bin/geosite.dat $geo_site_url
+
+    if [[ $? -eq 0 ]]; then
+        echo -e "${green}Geo IP databases updated successfully!${plain}"
+    else
+        echo -e "${red}Failed to update Geo IP databases.${plain}"
+    fi
+}
+
+show_usage() {
+    echo -e "
+Usage: $0 [command]
+
+Commands:
+  start      Start the x-ui panel
+  stop       Stop the x-ui panel
+  restart     Restart the x-ui panel
+  status     Show the status of the x-ui panel
+  settings   Show current settings
+  enable     Enable x-ui to start on boot
+  disable    Disable x-ui from starting on boot
+  log        Show the x-ui log
+  banlog     Show the ban log
+  update     Update the panel to the latest version
+  legacy     Install a legacy version of the panel
+  install    Install the panel
+  uninstall  Uninstall the panel
+
+For more information, please refer to the documentation.
+"
+}
+
+show_menu() {
+    clear
+    echo -e "
+╔══════════════════════════════════════╗
+║          X-UI Panel Management       ║
+╠══════════════════════════════════════╣
+║  ${green}1.${plain} Install X-UI Panel                   ║
+║  ${green}2.${plain} Update X-UI Panel                    ║
+║  ${green}3.${plain} Legacy Version Install               ║
+║  ${green}4.${plain} Uninstall X-UI Panel                 ║
+║  ${green}5.${plain} Reset Panel User                     ║
+║  ${green}6.${plain} Reset Web Base Path                 ║
+║  ${green}7.${plain} Reset Config to Default             ║
+║  ${green}8.${plain} Set Panel Port                      ║
+║  ${green}9.${plain} View Current Config                 ║
+║  ${green}10.${plain} Start X-UI Panel                   ║
+║  ${green}11.${plain} Stop X-UI Panel                    ║
+║  ${green}12.${plain} Restart X-UI Panel                 ║
+║  ${green}13.${plain} View X-UI Status                   ║
+║  ${green}14.${plain} View Logs                          ║
+║  ${green}15.${plain} Enable Auto Start                  ║
+║  ${green}16.${plain} Disable Auto Start                 ║
+║  ${green}17.${plain} SSL Certificate Management        ║
+║  ${green}18.${plain} IP Limit Management                ║
+║  ${green}19.${plain} Firewall Management                ║
+║  ${green}20.${plain} SSH Port Forwarding                ║
+║  ${green}21.${plain} Enable BBR                        ║
+║  ${green}22.${plain} Update Geo Files                  ║
+║  ${green}23.${plain} Speedtest by Ookla                ║
+╚══════════════════════════════════════╝
 "
     show_status
-    echo && read -p "Please enter your selection [0-25]: " num
+    echo && read -p "Please enter your selection [0-23]: " num
 
     case "${num}" in
     0)
