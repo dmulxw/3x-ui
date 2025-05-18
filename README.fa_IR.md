@@ -32,7 +32,7 @@
 ## نصب و ارتقا
 
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh)
 ```
 
 ## نصب نسخه‌های قدیمی (توصیه نمی‌شود)
@@ -40,7 +40,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.
 برای نصب نسخه خاصی از دستور زیر استفاده کنید. مثال برای نسخه `v1.7.9`:
 
 ```
-VERSION=v1.7.9 && bash <(curl -Ls "https://raw.githubusercontent.com/mhsanaei/3x-ui/$VERSION/install.sh") $VERSION
+VERSION=v1.7.9 && bash <(curl -Ls "https://raw.githubusercontent.com/dmulxw/3x-ui/$VERSION/install.sh") $VERSION
 ```
 
 ## گواهی SSL
@@ -116,7 +116,7 @@ case "${ARCH}" in
   *) XUI_ARCH="amd64" ;;
 esac
 
-wget https://github.com/MHSanaei/3x-ui/releases/latest/download/x-ui-linux-${XUI_ARCH}.tar.gz
+wget https://github.com/dmulxw/3x-ui/releases/latest/download/x-ui-linux-${XUI_ARCH}.tar.gz
 ```
 
 2. نصب یا ارتقا:
