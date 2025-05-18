@@ -143,6 +143,48 @@ before_show_menu() {
 }
 
 install() {
+    # 新增：提示用户输入域名和邮箱
+    echo -e "${yellow}请输入用于申请证书的域名（如 example.com）：${plain}"
+    read -rp "域名: " install_domain
+    echo -e "${yellow}请输入联系邮箱（Let's Encrypt 用于通知证书到期）：${plain}"
+    read -rp "邮箱: " install_email
+
+    # 检查域名和邮箱有效性
+    if [[ -z "$install_domain" || -z "$install_email" ]]; then
+        LOGE "域名和邮箱不能为空，安装中止。"
+        exit 1
+    fi
+
+    # 安装 acme.sh 并申请证书
+    install_acme
+    if [ $? -ne 0 ]; then
+        LOGE "acme.sh 安装失败"
+        exit 1
+    fi
+
+    # 申请证书
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+    ~/.acme.sh/acme.sh --register-account -m "$install_email"
+    ~/.acme.sh/acme.sh --issue -d "$install_domain" --standalone --force
+    if [ $? -ne 0 ]; then
+        LOGE "证书申请失败，请检查域名解析和端口占用"
+        exit 1
+    fi
+
+    # 安装证书到指定目录
+    cert_dir="/root/cert/${install_domain}"
+    mkdir -p "$cert_dir"
+    ~/.acme.sh/acme.sh --installcert -d "$install_domain" \
+        --key-file "$cert_dir/privkey.pem" \
+        --fullchain-file "$cert_dir/fullchain.pem"
+
+    # 配置 x-ui 面板证书
+    /usr/local/x-ui/x-ui cert -webCert "$cert_dir/fullchain.pem" -webCertKey "$cert_dir/privkey.pem"
+
+    # 安装并配置 nginx 伪装站点
+    install_nginx_with_cert "$install_domain" "$cert_dir/fullchain.pem" "$cert_dir/privkey.pem"
+
+    # 原有安装流程
     bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/install.sh)
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
@@ -151,6 +193,98 @@ install() {
             start 0
         fi
     fi
+}
+
+# 新增：自动安装并配置 nginx
+install_nginx_with_cert() {
+    local domain="$1"
+    local cert="$2"
+    local key="$3"
+
+    # 安装 nginx
+    if ! command -v nginx &>/dev/null; then
+        case "${release}" in
+        ubuntu | debian | armbian)
+            apt update && apt install -y nginx
+            ;;
+        centos | almalinux | rocky | ol)
+            yum install -y nginx
+            ;;
+        fedora | amzn)
+            dnf install -y nginx
+            ;;
+        arch | manjaro | parch)
+            pacman -Sy --noconfirm nginx
+            ;;
+        *)
+            LOGE "不支持的系统，请手动安装 nginx"
+            return 1
+            ;;
+        esac
+    fi
+
+    # 生成伪装站点配置
+    generate_fake_site "$domain"
+
+    # 配置 nginx 监听 80/443
+    cat >/etc/nginx/conf.d/fake_site.conf <<EOF
+server {
+    listen 80;
+    server_name $domain;
+    location / {
+        root /var/www/fake_site;
+        index index.html;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name $domain;
+    ssl_certificate     $cert;
+    ssl_certificate_key $key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    location / {
+        root /var/www/fake_site;
+        index index.html;
+    }
+    # 可选：反向代理到其他网站
+    # location / {
+    #     proxy_pass https://www.baidu.com/;
+    #     proxy_set_header Host www.baidu.com;
+    # }
+    # x-ui 面板子路径（如 /panel）反代到本地端口
+    location /panel/ {
+        proxy_pass http://127.0.0.1:54321/; # 假设 x-ui 监听 54321
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+    # 启动 nginx
+    mkdir -p /var/www/fake_site
+    systemctl enable nginx
+    systemctl restart nginx
+}
+
+# 新增：生成简单静态网页
+generate_fake_site() {
+    local domain="$1"
+    cat >/var/www/fake_site/index.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome to $domain</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h1>Welcome to $domain</h1>
+    <p>This is a fake site for camouflage.</p>
+</body>
+</html>
+EOF
 }
 
 update() {
@@ -1639,141 +1773,7 @@ remove_iplimit() {
     *)
         echo -e "${red}Invalid option. Please select a valid number.${plain}\n"
         remove_iplimit
-        ;;
-    esac
-}
-
-SSH_port_forwarding() {
-    local server_ip=$(curl -s https://api.ipify.org)
-    local existing_webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
-    local existing_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
-    local existing_listenIP=$(/usr/local/x-ui/x-ui setting -getListen true | grep -Eo 'listenIP: .+' | awk '{print $2}')
-    local existing_cert=$(/usr/local/x-ui/x-ui setting -getCert true | grep -Eo 'cert: .+' | awk '{print $2}')
-    local existing_key=$(/usr/local/x-ui/x-ui setting -getCert true | grep -Eo 'key: .+' | awk '{print $2}')
-
-    local config_listenIP=""
-    local listen_choice=""
-
-    if [[ -n "$existing_cert" && -n "$existing_key" ]]; then
-        echo -e "${green}Panel is secure with SSL.${plain}"
-        before_show_menu
-    fi
-    if [[ -z "$existing_cert" && -z "$existing_key" && (-z "$existing_listenIP" || "$existing_listenIP" == "0.0.0.0") ]]; then
-        echo -e "\n${red}Warning: No Cert and Key found! The panel is not secure.${plain}"
-        echo "Please obtain a certificate or set up SSH port forwarding."
-    fi
-
-    if [[ -n "$existing_listenIP" && "$existing_listenIP" != "0.0.0.0" && (-z "$existing_cert" && -z "$existing_key") ]]; then
-        echo -e "\n${green}Current SSH Port Forwarding Configuration:${plain}"
-        echo -e "Standard SSH command:"
-        echo -e "${yellow}ssh -L 2222:${existing_listenIP}:${existing_port} root@${server_ip}${plain}"
-        echo -e "\nIf using SSH key:"
-        echo -e "${yellow}ssh -i <sshkeypath> -L 2222:${existing_listenIP}:${existing_port} root@${server_ip}${plain}"
-        echo -e "\nAfter connecting, access the panel at:"
-        echo -e "${yellow}http://localhost:2222${existing_webBasePath}${plain}"
-    fi
-
-    echo -e "\nChoose an option:"
-    echo -e "${green}1.${plain} Set listen IP"
-    echo -e "${green}2.${plain} Clear listen IP"
-    echo -e "${green}0.${plain} Back to Main Menu"
-    read -p "Choose an option: " num
-
-    case "$num" in
-    1)
-        if [[ -z "$existing_listenIP" || "$existing_listenIP" == "0.0.0.0" ]]; then
-            echo -e "\nNo listenIP configured. Choose an option:"
-            echo -e "1. Use default IP (127.0.0.1)"
-            echo -e "2. Set a custom IP"
-            read -p "Select an option (1 or 2): " listen_choice
-
-            config_listenIP="127.0.0.1"
-            [[ "$listen_choice" == "2" ]] && read -p "Enter custom IP to listen on: " config_listenIP
-
-            /usr/local/x-ui/x-ui setting -listenIP "${config_listenIP}" >/dev/null 2>&1
-            echo -e "${green}listen IP has been set to ${config_listenIP}.${plain}"
-            echo -e "\n${green}SSH Port Forwarding Configuration:${plain}"
-            echo -e "Standard SSH command:"
-            echo -e "${yellow}ssh -L 2222:${config_listenIP}:${existing_port} root@${server_ip}${plain}"
-            echo -e "\nIf using SSH key:"
-            echo -e "${yellow}ssh -i <sshkeypath> -L 2222:${config_listenIP}:${existing_port} root@${server_ip}${plain}"
-            echo -e "\nAfter connecting, access the panel at:"
-            echo -e "${yellow}http://localhost:2222${existing_webBasePath}${plain}"
-            restart
-        else
-            config_listenIP="${existing_listenIP}"
-            echo -e "${green}Current listen IP is already set to ${config_listenIP}.${plain}"
-        fi
-        ;;
-    2)
-        /usr/local/x-ui/x-ui setting -listenIP 0.0.0.0 >/dev/null 2>&1
-        echo -e "${green}Listen IP has been cleared.${plain}"
-        restart
-        ;;
-    0)
-        show_menu
-        ;;
-    *)
-        echo -e "${red}Invalid option. Please select a valid number.${plain}\n"
-        SSH_port_forwarding
-        ;;
-    esac
-}
-
-show_usage() {
-    echo -e "┌───────────────────────────────────────────────────────┐
-│  ${blue}x-ui control menu usages (subcommands):${plain}              │
-│                                                       │
-│  ${blue}x-ui${plain}              - Admin Management Script          │
-│  ${blue}x-ui start${plain}        - Start                            │
-│  ${blue}x-ui stop${plain}         - Stop                             │
-│  ${blue}x-ui restart${plain}      - Restart                          │
-│  ${blue}x-ui status${plain}       - Current Status                   │
-│  ${blue}x-ui settings${plain}     - Current Settings                 │
-│  ${blue}x-ui enable${plain}       - Enable Autostart on OS Startup   │
-│  ${blue}x-ui disable${plain}      - Disable Autostart on OS Startup  │
-│  ${blue}x-ui log${plain}          - Check logs                       │
-│  ${blue}x-ui banlog${plain}       - Check Fail2ban ban logs          │
-│  ${blue}x-ui update${plain}       - Update                           │
-│  ${blue}x-ui legacy${plain}       - legacy version                   │
-│  ${blue}x-ui install${plain}      - Install                          │
-│  ${blue}x-ui uninstall${plain}    - Uninstall                        │
-└───────────────────────────────────────────────────────┘"
-}
-
-show_menu() {
-    echo -e "
-╔────────────────────────────────────────────────╗
-│   ${green}3X-UI Panel Management Script${plain}                │
-│   ${green}0.${plain} Exit Script                               │
-│────────────────────────────────────────────────│
-│   ${green}1.${plain} Install                                   │
-│   ${green}2.${plain} Update                                    │
-│   ${green}3.${plain} Update Menu                               │
-│   ${green}4.${plain} Legacy Version                            │
-│   ${green}5.${plain} Uninstall                                 │
-│────────────────────────────────────────────────│
-│   ${green}6.${plain} Reset Username & Password & Secret Token  │
-│   ${green}7.${plain} Reset Web Base Path                       │
-│   ${green}8.${plain} Reset Settings                            │
-│   ${green}9.${plain} Change Port                               │
-│  ${green}10.${plain} View Current Settings                     │
-│────────────────────────────────────────────────│
-│  ${green}11.${plain} Start                                     │
-│  ${green}12.${plain} Stop                                      │
-│  ${green}13.${plain} Restart                                   │
-│  ${green}14.${plain} Check Status                              │
-│  ${green}15.${plain} Logs Management                           │
-│────────────────────────────────────────────────│
-│  ${green}16.${plain} Enable Autostart                          │
-│  ${green}17.${plain} Disable Autostart                         │
-│────────────────────────────────────────────────│
-│  ${green}18.${plain} SSL Certificate Management                │
-│  ${green}19.${plain} Cloudflare SSL Certificate                │
-│  ${green}20.${plain} IP Limit Management                       │
-│  ${green}21.${plain} Firewall Management                       │
-│  ${green}22.${plain} SSH Port Forwarding Management            │
-│────────────────────────────────────────────────│
+        ;
 │  ${green}23.${plain} Enable BBR                                │
 │  ${green}24.${plain} Update Geo Files                          │
 │  ${green}25.${plain} Speedtest by Ookla                        │
