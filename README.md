@@ -30,7 +30,7 @@
 - LTC (Litecoin): `ltc1q2ach7x6d2zq0n4l0t4zl7d7xe2s6fs7a3vspwv`
 
 ## Install & Upgrade
-
+if CentOS ，CentOS 8 required or Ubuntu 
 ```
 curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh | sudo bash
 

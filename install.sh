@@ -510,8 +510,8 @@ auto_ssl_and_nginx() {
     while true; do
         echo -e "${yellow}请输入联系邮箱（Let's Encrypt 用于通知证书到期）：${plain}"
         read -r email < /dev/tty
-        # 邮箱校验：包含@和.
-        if [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-ZaZ]{2,}$ ]]; then
+        # 邮箱校验：包含@和.，且后缀长度>=2
+        if [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
             break
         else
             echo -e "${red}邮箱格式不正确，请重新输入。${plain}"
