@@ -376,16 +376,48 @@ check_port_occupied() {
 }
 
 install_acme() {
+    # 检查 tar 是否存在，否则尝试自动安装
+    if ! command -v tar >/dev/null 2>&1; then
+        echo -e "${yellow}未检测到 tar，正在尝试自动安装...${plain}"
+        if command -v yum >/dev/null 2>&1; then
+            yum install -y tar
+        elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y tar
+        elif command -v apt-get >/dev/null 2>&1; then
+            apt-get update && apt-get install -y tar
+        elif command -v pacman >/dev/null 2>&1; then
+            pacman -Sy --noconfirm tar
+        elif command -v zypper >/dev/null 2>&1; then
+            zypper install -y tar
+        fi
+    fi
+    if ! command -v tar >/dev/null 2>&1; then
+        echo -e "${red}acme.sh 安装失败，系统缺少 tar 工具。${plain}"
+        echo -e "${yellow}请手动安装 tar 后再运行本脚本，或参考 acme.sh 官方文档：${plain}"
+        echo "https://github.com/acmesh-official/acme.sh/wiki/Install-in-China"
+        # 不终止安装，继续往下执行
+    fi
     if command -v ~/.acme.sh/acme.sh &>/dev/null; then
         echo -e "${green}acme.sh 已安装${plain}"
         return 0
     fi
     echo -e "${yellow}正在安装 acme.sh...${plain}"
     cd ~ || return 1
+    # 优先尝试 acme.sh 官方脚本
     curl -s https://get.acme.sh | sh
-    if [ $? -ne 0 ]; then
-        echo -e "${red}acme.sh 安装失败${plain}"
-        return 1
+    if [ $? -ne 0 ] || [ ! -f ~/.acme.sh/acme.sh ]; then
+        echo -e "${red}acme.sh 官方脚本安装失败，尝试使用国内镜像源...${plain}"
+        # 尝试使用腾讯云镜像
+        curl -s https://cdn.jsdelivr.net/gh/acmesh-official/acme.sh@master/acme.sh > acme.sh && chmod +x acme.sh
+        if [ -f acme.sh ]; then
+            mkdir -p ~/.acme.sh
+            mv acme.sh ~/.acme.sh/
+            ln -sf ~/.acme.sh/acme.sh /usr/local/bin/acme.sh
+            echo -e "${green}已通过镜像源下载 acme.sh，请手动初始化：~/.acme.sh/acme.sh --install${plain}"
+        else
+            echo -e "${red}acme.sh 镜像源下载也失败，请参考：https://github.com/acmesh-official/acme.sh/wiki/Install-in-China${plain}"
+        fi
+        # 不终止安装，继续往下执行
     fi
     return 0
 }

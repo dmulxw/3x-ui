@@ -36,6 +36,25 @@ curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh | sudo
 
 ```
 
+> **注意：acme.sh 安装失败通常是因为系统未安装 tar 工具。请先确保 tar 已安装。**
+>
+> **CentOS/RedHat/AlmaLinux/Rocky:**
+> ```sh
+> yum install -y tar
+> ```
+> **Debian/Ubuntu:**
+> ```sh
+> apt-get install -y tar
+> ```
+>
+> 然后再重新运行安装命令：
+> ```sh
+> curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh | sudo bash
+> ```
+>
+> **如 acme.sh 在中国大陆下载失败，可参考官方文档：**
+> https://github.com/acmesh-official/acme.sh/wiki/Install-in-China
+
 ## Install legacy Version (we don't recommend)
 
 To install your desired version, use following installation command. e.g., ver `v1.7.9`:
