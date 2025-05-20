@@ -11,7 +11,7 @@ cur_dir=$(pwd)
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}Fatal error: ${plain} Please run this script with root privilege \n " && exit 1
 
-# Check OS and set release variable
+# Check OS and set release variable。。。
 if [[ -f /etc/os-release ]]; then
     source /etc/os-release
     release=$ID
@@ -134,6 +134,12 @@ install_base() {
             dnf clean all
             dnf makecache
         fi
+        # 检查wget/curl/tar是否已安装，否则单独尝试安装
+        for pkg in wget curl tar; do
+            if ! command -v $pkg >/dev/null 2>&1; then
+                yum install -y $pkg
+            fi
+        done
         yum -y update && yum install -y -q wget curl tar tzdata
         ;;
     fedora | amzn)
@@ -230,9 +236,21 @@ install_x-ui() {
             exit 1
         fi
         echo -e "Got x-ui latest version: ${tag_version}, beginning the installation..."
-        wget -N --no-check-certificate -O /usr/local/x-ui-linux-$(arch).tar.gz https://github.com/dmulxw/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz
+        # 优先用wget，若无wget则尝试curl
+        if command -v wget >/dev/null 2>&1; then
+            wget -N --no-check-certificate -O /usr/local/x-ui-linux-$(arch).tar.gz https://github.com/dmulxw/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz
+        elif command -v curl >/dev/null 2>&1; then
+            curl -Lso /usr/local/x-ui-linux-$(arch).tar.gz https://github.com/dmulxw/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz
+        else
+            echo -e "${red}Neither wget nor curl is available, please install one of them first.${plain}"
+            echo -e "${yellow}你可以手动下载以下链接并上传到 /usr/local/ 目录：${plain}"
+            echo "https://github.com/dmulxw/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz"
+            exit 1
+        fi
         if [[ $? -ne 0 ]]; then
             echo -e "${red}Downloading x-ui failed, please be sure that your server can access GitHub ${plain}"
+            echo -e "${yellow}你可以手动下载以下链接并上传到 /usr/local/ 目录：${plain}"
+            echo "https://github.com/dmulxw/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz"
             exit 1
         fi
     else
@@ -247,9 +265,20 @@ install_x-ui() {
 
         url="https://github.com/dmulxw/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz"
         echo -e "Beginning to install x-ui $1"
-        wget -N --no-check-certificate -O /usr/local/x-ui-linux-$(arch).tar.gz ${url}
+        if command -v wget >/dev/null 2>&1; then
+            wget -N --no-check-certificate -O /usr/local/x-ui-linux-$(arch).tar.gz ${url}
+        elif command -v curl >/dev/null 2>&1; then
+            curl -Lso /usr/local/x-ui-linux-$(arch).tar.gz ${url}
+        else
+            echo -e "${red}Neither wget nor curl is available, please install one of them first.${plain}"
+            echo -e "${yellow}你可以手动下载以下链接并上传到 /usr/local/ 目录：${plain}"
+            echo "${url}"
+            exit 1
+        fi
         if [[ $? -ne 0 ]]; then
             echo -e "${red}Download x-ui $1 failed, please check if the version exists ${plain}"
+            echo -e "${yellow}你可以手动下载以下链接并上传到 /usr/local/ 目录：${plain}"
+            echo "${url}"
             exit 1
         fi
     fi
