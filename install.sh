@@ -376,48 +376,26 @@ check_port_occupied() {
 }
 
 install_acme() {
-    # 检查 tar 是否存在，否则尝试自动安装
+    # 检查 tar 是否存在，否则提示
     if ! command -v tar >/dev/null 2>&1; then
-        echo -e "${yellow}未检测到 tar，正在尝试自动安装...${plain}"
-        if command -v yum >/dev/null 2>&1; then
-            yum install -y tar
-        elif command -v dnf >/dev/null 2>&1; then
-            dnf install -y tar
-        elif command -v apt-get >/dev/null 2>&1; then
-            apt-get update && apt-get install -y tar
-        elif command -v pacman >/dev/null 2>&1; then
-            pacman -Sy --noconfirm tar
-        elif command -v zypper >/dev/null 2>&1; then
-            zypper install -y tar
-        fi
-    fi
-    if ! command -v tar >/dev/null 2>&1; then
-        echo -e "${red}acme.sh 安装失败，系统缺少 tar 工具。${plain}"
+        echo -e "${red}未检测到 tar，acme.sh 及证书功能将无法使用。${plain}"
         echo -e "${yellow}请手动安装 tar 后再运行本脚本，或参考 acme.sh 官方文档：${plain}"
         echo "https://github.com/acmesh-official/acme.sh/wiki/Install-in-China"
-        # 不终止安装，继续往下执行
+        # 不终止，继续尝试后续步骤
     fi
-    # 检查 socat 是否存在，否则尝试自动安装
+    # 检查 socat 是否存在，否则尝试用 busybox socat 或提示
     if ! command -v socat >/dev/null 2>&1; then
-        echo -e "${yellow}未检测到 socat，正在尝试自动安装...${plain}"
-        if command -v yum >/dev/null 2>&1; then
-            yum install -y socat
-        elif command -v dnf >/dev/null 2>&1; then
-            dnf install -y socat
-        elif command -v apt-get >/dev/null 2>&1; then
-            apt-get update && apt-get install -y socat
-        elif command -v pacman >/dev/null 2>&1; then
-            pacman -Sy --noconfirm socat
-        elif command -v zypper >/dev/null 2>&1; then
-            zypper install -y socat
+        if command -v busybox >/dev/null 2>&1 && busybox | grep -q socat; then
+            alias socat='busybox socat'
+            echo -e "${yellow}未检测到系统 socat，尝试使用 busybox socat 兼容。${plain}"
+        else
+            echo -e "${red}未检测到 socat，acme.sh 证书申请可能失败。${plain}"
+            echo -e "${yellow}请手动安装 socat 后再运行本脚本，或参考 acme.sh 官方文档：${plain}"
+            echo "https://github.com/acmesh-official/acme.sh/wiki/Install-in-China"
+            # 不终止，继续尝试后续步骤
         fi
     fi
-    if ! command -v socat >/dev/null 2>&1; then
-        echo -e "${red}acme.sh 申请证书需要 socat 工具，自动安装失败。${plain}"
-        echo -e "${yellow}请手动安装 socat 后再运行本脚本，或参考 acme.sh 官方文档：${plain}"
-        echo "https://github.com/acmesh-official/acme.sh/wiki/Install-in-China"
-        # 不终止安装，继续往下执行
-    fi
+    # 检查 acme.sh 是否已安装
     if command -v ~/.acme.sh/acme.sh &>/dev/null; then
         echo -e "${green}acme.sh 已安装${plain}"
         return 0
@@ -437,7 +415,7 @@ install_acme() {
         else
             echo -e "${red}acme.sh 镜像源下载也失败，请参考：https://github.com/acmesh-official/acme.sh/wiki/Install-in-China${plain}"
         fi
-        # 不终止安装，继续往下执行
+        # 不终止，继续尝试后续步骤
     fi
     return 0
 }
