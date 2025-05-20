@@ -438,29 +438,55 @@ auto_ssl_and_nginx() {
     # 检查端口占用
     check_port_occupied
     # 申请证书
-    echo -e "${yellow}请输入用于申请证书的域名（如 example.com）：${plain}"
-    read -rp "域名: " install_domain
-    echo -e "${yellow}请输入联系邮箱（Let's Encrypt 用于通知证书到期）：${plain}"
-    read -rp "邮箱: " install_email
-    if [[ -z "$install_domain" || -z "$install_email" ]]; then
-        echo -e "${red}域名和邮箱不能为空，安装中止。${plain}"
-        exit 1
-    fi
+    local retry=0
+    local domain=""
+    local email=""
+    while true; do
+        echo -e "${yellow}请输入用于申请证书的域名（如 example.com）：${plain}"
+        read -r domain < /dev/tty
+        # 域名校验：包含至少一个点且不是首尾，且后缀长度>=2
+        if [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
+            break
+        else
+            echo -e "${red}域名格式不正确，请重新输入。${plain}"
+            retry=$((retry+1))
+            if [[ $retry -ge 2 ]]; then
+                echo "输入错误次数过多，安装中止。"
+                exit 1
+            fi
+        fi
+    done
+    retry=0
+    while true; do
+        echo -e "${yellow}请输入联系邮箱（Let's Encrypt 用于通知证书到期）：${plain}"
+        read -r email < /dev/tty
+        # 邮箱校验：包含@和.
+        if [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-ZaZ]{2,}$ ]]; then
+            break
+        else
+            echo -e "${red}邮箱格式不正确，请重新输入。${plain}"
+            retry=$((retry+1))
+            if [[ $retry -ge 2 ]]; then
+                echo "输入错误次数过多，安装中止。"
+                exit 1
+            fi
+        fi
+    done
     install_acme
     if [ $? -ne 0 ]; then
         echo -e "${red}acme.sh 安装失败${plain}"
         exit 1
     fi
     ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-    ~/.acme.sh/acme.sh --register-account -m "$install_email"
-    ~/.acme.sh/acme.sh --issue -d "$install_domain" --standalone --force
+    ~/.acme.sh/acme.sh --register-account -m "$email"
+    ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force
     if [ $? -ne 0 ]; then
         echo -e "${red}证书申请失败，请检查域名解析和端口占用${plain}"
         exit 1
     fi
-    cert_dir="/root/cert/${install_domain}"
+    cert_dir="/root/cert/${domain}"
     mkdir -p "$cert_dir"
-    ~/.acme.sh/acme.sh --installcert -d "$install_domain" \
+    ~/.acme.sh/acme.sh --installcert -d "$domain" \
         --key-file "$cert_dir/privkey.pem" \
         --fullchain-file "$cert_dir/fullchain.pem"
     # 自动写入证书路径到x-ui配置
@@ -472,7 +498,7 @@ auto_ssl_and_nginx() {
         echo -e "${green}已设置acme.sh自动续期定时任务（每2个月1号凌晨3点自动续期）${plain}"
     fi
     # 安装并配置nginx
-    install_nginx_with_cert "$install_domain" "$cert_dir/fullchain.pem" "$cert_dir/privkey.pem"
+    install_nginx_with_cert "$domain" "$cert_dir/fullchain.pem" "$cert_dir/privkey.pem"
     # 显示客户端下载地址
     echo -e "${green}客户端下载地址：${plain}"
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg"
