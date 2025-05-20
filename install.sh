@@ -534,17 +534,3 @@ install_x-ui $1
 
 # 自动化SSL证书、nginx、默认站点、证书路径写入
 auto_ssl_and_nginx
-
-# ...先修复yum源...
-sed -e 's|^mirrorlist=|#mirrorlist=|g' \
-    -e 's|^#baseurl=http://mirror.centos.org|baseurl=https://mirrors.aliyun.com|g' \
-    -i.bak \
-    /etc/yum.repos.d/CentOS-*.repo
-dnf clean all
-dnf makecache
-
-# ...然后安装wget...
-dnf install wget -y
-
-# ...再重新运行安装脚本...
-# bash install.sh
