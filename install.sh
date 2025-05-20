@@ -112,14 +112,35 @@ fi
 
 install_base() {
     case "${release}" in
-    ubuntu | debian | armbian)
-        apt-get update && apt-get install -y -q wget curl tar tzdata
-        ;;
     centos | almalinux | rocky | ol)
+        # 检查主源可用性
+        if ! curl -s --connect-timeout 3 http://mirror.centos.org/centos/8/os/x86_64/repodata/repomd.xml >/dev/null; then
+            echo -e "${yellow}检测到官方源不可用，尝试切换到清华或阿里云镜像源...${plain}"
+            # 优先切换到清华源
+            if curl -s --connect-timeout 3 https://mirrors.tuna.tsinghua.edu.cn/centos/8/os/x86_64/repodata/repomd.xml >/dev/null; then
+                sed -e 's|^mirrorlist=|#mirrorlist=|g' \
+                    -e 's|^#baseurl=http://mirror.centos.org|baseurl=https://mirrors.tuna.tsinghua.edu.cn|g' \
+                    -i.bak \
+                    /etc/yum.repos.d/CentOS-*.repo
+                echo -e "${green}已切换到清华镜像源${plain}"
+            else
+                # 切换到阿里云
+                sed -e 's|^mirrorlist=|#mirrorlist=|g' \
+                    -e 's|^#baseurl=http://mirror.centos.org|baseurl=https://mirrors.aliyun.com|g' \
+                    -i.bak \
+                    /etc/yum.repos.d/CentOS-*.repo
+                echo -e "${green}已切换到阿里云镜像源${plain}"
+            fi
+            dnf clean all
+            dnf makecache
+        fi
         yum -y update && yum install -y -q wget curl tar tzdata
         ;;
     fedora | amzn)
         dnf -y update && dnf install -y -q wget curl tar tzdata
+        ;;
+    ubuntu | debian | armbian)
+        apt-get update && apt-get install -y -q wget curl tar tzdata
         ;;
     arch | manjaro | parch)
         pacman -Syu && pacman -Syu --noconfirm wget curl tar tzdata
@@ -513,3 +534,17 @@ install_x-ui $1
 
 # 自动化SSL证书、nginx、默认站点、证书路径写入
 auto_ssl_and_nginx
+
+# ...先修复yum源...
+sed -e 's|^mirrorlist=|#mirrorlist=|g' \
+    -e 's|^#baseurl=http://mirror.centos.org|baseurl=https://mirrors.aliyun.com|g' \
+    -i.bak \
+    /etc/yum.repos.d/CentOS-*.repo
+dnf clean all
+dnf makecache
+
+# ...然后安装wget...
+dnf install wget -y
+
+# ...再重新运行安装脚本...
+# bash install.sh
