@@ -31,6 +31,33 @@
 
 ## 安装 & 升级
 
+> **CentOS 8 用户注意：**  
+> CentOS 8 官方软件源已失效，首次安装前请先手动切换为可用的国内镜像源（如清华或阿里云），并确保 wget、curl、tar 等依赖已安装，否则安装会失败。  
+> 参考命令（任选其一）：
+> 
+> 清华源：
+> ```sh
+> sed -e 's|^mirrorlist=|#mirrorlist=|g' \
+>     -e 's|^#baseurl=http://mirror.centos.org|baseurl=https://mirrors.tuna.tsinghua.edu.cn|g' \
+>     -i.bak \
+>     /etc/yum.repos.d/CentOS-*.repo
+> dnf clean all
+> dnf makecache
+> ```
+> 阿里云源：
+> ```sh
+> sed -e 's|^mirrorlist=|#mirrorlist=|g' \
+>     -e 's|^#baseurl=http://mirror.centos.org|baseurl=https://mirrors.aliyun.com|g' \
+>     -i.bak \
+>     /etc/yum.repos.d/CentOS-*.repo
+> dnf clean all
+> dnf makecache
+> ```
+> 然后安装依赖：
+> ```sh
+> dnf install wget curl tar -y
+> ```
+
 ```
 curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh | sudo bash
 ```
