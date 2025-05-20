@@ -203,13 +203,13 @@ install_x-ui() {
     cd /usr/local/
 
     if [ $# == 0 ]; then
-        tag_version=$(curl -Ls "https://api.github.com/repos/MHSanaei/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        tag_version=$(curl -Ls "https://api.github.com/repos/dmulxw/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
         if [[ ! -n "$tag_version" ]]; then
             echo -e "${red}Failed to fetch x-ui version, it may be due to GitHub API restrictions, please try it later${plain}"
             exit 1
         fi
         echo -e "Got x-ui latest version: ${tag_version}, beginning the installation..."
-        wget -N --no-check-certificate -O /usr/local/x-ui-linux-$(arch).tar.gz https://github.com/MHSanaei/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz
+        wget -N --no-check-certificate -O /usr/local/x-ui-linux-$(arch).tar.gz https://github.com/dmulxw/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz
         if [[ $? -ne 0 ]]; then
             echo -e "${red}Downloading x-ui failed, please be sure that your server can access GitHub ${plain}"
             exit 1
@@ -224,7 +224,7 @@ install_x-ui() {
             exit 1
         fi
 
-        url="https://github.com/MHSanaei/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz"
+        url="https://github.com/dmulxw/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz"
         echo -e "Beginning to install x-ui $1"
         wget -N --no-check-certificate -O /usr/local/x-ui-linux-$(arch).tar.gz ${url}
         if [[ $? -ne 0 ]]; then
@@ -251,7 +251,7 @@ install_x-ui() {
 
     chmod +x x-ui bin/xray-linux-$(arch)
     cp -f x-ui.service /etc/systemd/system/
-    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/MHSanaei/3x-ui/main/x-ui.sh
+    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/dmulxw/3x-ui/main/x-ui.sh
     chmod +x /usr/local/x-ui/x-ui.sh
     chmod +x /usr/bin/x-ui
     config_after_install
@@ -281,6 +281,209 @@ install_x-ui() {
 └───────────────────────────────────────────────────────┘"
 }
 
+check_firewall_ports() {
+    local need_open=0
+    local close_cmds=""
+    # 检查ufw是否安装并启用
+    if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
+        for port in 80 443; do
+            if ! ufw status | grep -qw "$port"; then
+                ufw allow $port
+                need_open=1
+                close_cmds+="ufw delete allow $port\n"
+            fi
+        done
+        if [[ $need_open -eq 1 ]]; then
+            echo -e "${green}防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
+        fi
+    fi
+    # firewalld
+    if command -v firewall-cmd &>/dev/null && firewall-cmd --state &>/dev/null; then
+        for port in 80 443; do
+            if ! firewall-cmd --list-ports | grep -qw "${port}/tcp"; then
+                firewall-cmd --permanent --add-port=${port}/tcp
+                firewall-cmd --reload
+                need_open=1
+                close_cmds+="firewall-cmd --permanent --remove-port=${port}/tcp && firewall-cmd --reload\n"
+            fi
+        done
+        if [[ $need_open -eq 1 ]]; then
+            echo -e "${green}防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
+        fi
+    fi
+}
+
+check_port_occupied() {
+    for port in 80 443; do
+        local pinfo
+        pinfo=$(lsof -i :$port -sTCP:LISTEN 2>/dev/null | grep -v "COMMAND")
+        if [[ -n "$pinfo" ]]; then
+            echo -e "${red}端口${port}已被占用，相关进程如下：${plain}"
+            echo "$pinfo"
+            exit 1
+        fi
+    done
+}
+
+install_acme() {
+    if command -v ~/.acme.sh/acme.sh &>/dev/null; then
+        echo -e "${green}acme.sh 已安装${plain}"
+        return 0
+    fi
+    echo -e "${yellow}正在安装 acme.sh...${plain}"
+    cd ~ || return 1
+    curl -s https://get.acme.sh | sh
+    if [ $? -ne 0 ]; then
+        echo -e "${red}acme.sh 安装失败${plain}"
+        return 1
+    fi
+    return 0
+}
+
+generate_default_site() {
+    local domain="$1"
+    local site_dir="/var/www/default_site"
+    mkdir -p "$site_dir"
+    local webzip_url="https://github.com/dmulxw/3x-ui/releases/download/trojan/web.zip"
+    if curl --head --silent --fail "$webzip_url" >/dev/null; then
+        tmpzip="/tmp/web.zip"
+        curl -Lso "$tmpzip" "$webzip_url"
+        if command -v unzip &>/dev/null; then
+            unzip -o "$tmpzip" -d "$site_dir"
+        else
+            apt-get update && apt-get install -y unzip || yum install -y unzip
+            unzip -o "$tmpzip" -d "$site_dir"
+        fi
+        rm -f "$tmpzip"
+    else
+        cat >"$site_dir/index.html" <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome to $domain</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h1>Welcome to $domain</h1>
+    <p>This is a default site for camouflage.</p>
+</body>
+</html>
+EOF
+    fi
+}
+
+install_nginx_with_cert() {
+    local domain="$1"
+    local cert="$2"
+    local key="$3"
+    # 安装 nginx
+    if ! command -v nginx &>/dev/null; then
+        case "${release}" in
+        ubuntu | debian | armbian)
+            apt update && apt install -y nginx
+            ;;
+        centos | almalinux | rocky | ol)
+            yum install -y nginx
+            ;;
+        fedora | amzn)
+            dnf install -y nginx
+            ;;
+        arch | manjaro | parch)
+            pacman -Sy --noconfirm nginx
+            ;;
+        *)
+            echo -e "${red}不支持的系统，请手动安装 nginx${plain}"
+            return 1
+            ;;
+        esac
+    fi
+    generate_default_site "$domain"
+    cat >/etc/nginx/conf.d/default_site.conf <<EOF
+server {
+    listen 80;
+    server_name $domain;
+    location / {
+        root /var/www/default_site;
+        index index.html;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name $domain;
+    ssl_certificate     $cert;
+    ssl_certificate_key $key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    location / {
+        root /var/www/default_site;
+        index index.html;
+    }
+    location /panel/ {
+        proxy_pass http://127.0.0.1:54321/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+    mkdir -p /var/www/default_site
+    systemctl enable nginx
+    systemctl restart nginx
+}
+
+auto_ssl_and_nginx() {
+    # 检查防火墙
+    check_firewall_ports
+    # 检查端口占用
+    check_port_occupied
+    # 申请证书
+    echo -e "${yellow}请输入用于申请证书的域名（如 example.com）：${plain}"
+    read -rp "域名: " install_domain
+    echo -e "${yellow}请输入联系邮箱（Let's Encrypt 用于通知证书到期）：${plain}"
+    read -rp "邮箱: " install_email
+    if [[ -z "$install_domain" || -z "$install_email" ]]; then
+        echo -e "${red}域名和邮箱不能为空，安装中止。${plain}"
+        exit 1
+    fi
+    install_acme
+    if [ $? -ne 0 ]; then
+        echo -e "${red}acme.sh 安装失败${plain}"
+        exit 1
+    fi
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+    ~/.acme.sh/acme.sh --register-account -m "$install_email"
+    ~/.acme.sh/acme.sh --issue -d "$install_domain" --standalone --force
+    if [ $? -ne 0 ]; then
+        echo -e "${red}证书申请失败，请检查域名解析和端口占用${plain}"
+        exit 1
+    fi
+    cert_dir="/root/cert/${install_domain}"
+    mkdir -p "$cert_dir"
+    ~/.acme.sh/acme.sh --installcert -d "$install_domain" \
+        --key-file "$cert_dir/privkey.pem" \
+        --fullchain-file "$cert_dir/fullchain.pem"
+    # 自动写入证书路径到x-ui配置
+    /usr/local/x-ui/x-ui cert -webCert "$cert_dir/fullchain.pem" -webCertKey "$cert_dir/privkey.pem"
+    /usr/local/x-ui/x-ui setting -subCertFile "$cert_dir/fullchain.pem" -subKeyFile "$cert_dir/privkey.pem"
+    # 自动续期
+    if ! crontab -l 2>/dev/null | grep -q 'acme.sh --cron'; then
+        (crontab -l 2>/dev/null; echo "0 3 1 */2 * ~/.acme.sh/acme.sh --cron --home ~/.acme.sh > /dev/null") | crontab -
+        echo -e "${green}已设置acme.sh自动续期定时任务（每2个月1号凌晨3点自动续期）${plain}"
+    fi
+    # 安装并配置nginx
+    install_nginx_with_cert "$install_domain" "$cert_dir/fullchain.pem" "$cert_dir/privkey.pem"
+    # 显示客户端下载地址
+    echo -e "${green}客户端下载地址：${plain}"
+    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg"
+    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage"
+    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z"
+    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk"
+}
+
 echo -e "${green}Running...${plain}"
 install_base
 install_x-ui $1
+
+# 自动化SSL证书、nginx、默认站点、证书路径写入
+auto_ssl_and_nginx

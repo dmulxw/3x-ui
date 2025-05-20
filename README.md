@@ -277,11 +277,11 @@ Our platform offers compatibility with a diverse range of architectures and devi
 
 - **armv8 / arm64 / aarch64**: Tailored for contemporary mobile and embedded devices, such as smartphones and tablets, this architecture is exemplified by devices like Raspberry Pi 4, Raspberry Pi 3, Raspberry Pi Zero 2/Zero 2 W, Orange Pi 3 LTS, and more.
 
-- **armv7 / arm / arm32**: Serving as the architecture for older mobile and embedded devices, it remains widely utilized in devices like Orange Pi Zero LTS, Orange Pi PC Plus, Raspberry Pi 2, among others.
+- **armv7 / armv7**: Serving as the architecture for older mobile and embedded devices, it remains widely utilized in devices like Orange Pi Zero LTS, Orange Pi PC Plus, Raspberry Pi 2, among others.
 
-- **armv6 / arm / arm32**: Geared towards very old embedded devices, this architecture, while less prevalent, is still in use. Devices such as Raspberry Pi 1, Raspberry Pi Zero/Zero W, rely on this architecture.
+- **armv6 / armv6**: Geared towards very old embedded devices, this architecture, while less prevalent, is still in use. Devices such as Raspberry Pi 1, Raspberry Pi Zero/Zero W, rely on this architecture.
 
-- **armv5 / arm / arm32**: An older architecture primarily associated with early embedded systems, it is less common today but may still be found in legacy devices like early Raspberry Pi versions and some older smartphones.
+- **armv5 / armv5**: An older architecture primarily associated with early embedded systems, it is less common today but may still be found in legacy devices like early Raspberry Pi versions and some older smartphones.
 
 - **s390x**: This architecture is commonly used in IBM mainframe computers and offers high performance and reliability for enterprise workloads.
 </details>
@@ -593,3 +593,32 @@ XUI_BIN_FOLDER="bin" XUI_DB_FOLDER="/etc/x-ui" go build main.go
 ## Stargazers over Time
 
 [![Stargazers over time](https://starchart.cc/MHSanaei/3x-ui.svg?variant=adaptive)](https://starchart.cc/MHSanaei/3x-ui)
+
+> **如何生成 `x-ui-linux-$(arch).tar.gz`？**
+
+该文件是 x-ui 的二进制发行包（release archive），包含主程序、依赖文件、脚本等。  
+**生成步骤如下：**
+
+1. **编译主程序**  
+   进入项目根目录，使用 Go 交叉编译生成不同架构的二进制文件，例如：
+   ```sh
+   # 以 amd64 为例
+   GOOS=linux GOARCH=amd64 go build -o x-ui
+   ```
+
+2. **准备打包内容**  
+   将编译好的 `x-ui` 二进制文件、`bin/xray-linux-*`、`x-ui.sh`、`x-ui.service`、web目录等需要的文件放入一个目录（如 `x-ui/`）。
+
+3. **打包为 tar.gz**  
+   在该目录外执行：
+   ```sh
+   tar czvf x-ui-linux-amd64.tar.gz x-ui/
+   ```
+   其它架构（如 arm64、386 等）同理，分别编译并打包。
+
+4. **上传到 GitHub Releases**  
+   在 GitHub 发布新版本时，将各架构的 `x-ui-linux-xxx.tar.gz` 上传到对应的 Release。
+
+**注意：**  
+- 你可以参考原项目的 [release.yml](https://github.com/MHSanaei/3x-ui/blob/main/.github/workflows/release.yml) 自动化脚本，实现自动编译和打包。
+- 手动打包时，确保所有运行所需文件都包含在压缩包内。

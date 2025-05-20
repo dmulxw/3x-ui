@@ -187,58 +187,7 @@ check_port_occupied() {
 }
 
 install() {
-    # 新增：提示用户输入域名和邮箱
-    echo -e "${yellow}请输入用于申请证书的域名（如 example.com）：${plain}"
-    read -rp "域名: " install_domain
-    echo -e "${yellow}请输入联系邮箱（Let's Encrypt 用于通知证书到期）：${plain}"
-    read -rp "邮箱: " install_email
-
-    # 检查域名和邮箱有效性
-    if [[ -z "$install_domain" || -z "$install_email" ]]; then
-        LOGE "域名和邮箱不能为空，安装中止。"
-        exit 1
-    fi
-
-    # 安装 acme.sh 并申请证书
-    install_acme
-    if [ $? -ne 0 ]; then
-        LOGE "acme.sh 安装失败"
-        exit 1
-    fi
-
-    # 申请证书
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-    ~/.acme.sh/acme.sh --register-account -m "$install_email"
-    ~/.acme.sh/acme.sh --issue -d "$install_domain" --standalone --force
-    if [ $? -ne 0 ]; then
-        LOGE "证书申请失败，请检查域名解析和端口占用"
-        exit 1
-    fi
-
-    # 安装证书到指定目录
-    cert_dir="/root/cert/${install_domain}"
-    mkdir -p "$cert_dir"
-    ~/.acme.sh/acme.sh --installcert -d "$install_domain" \
-        --key-file "$cert_dir/privkey.pem" \
-        --fullchain-file "$cert_dir/fullchain.pem"
-
-    # 配置 x-ui 面板证书
-    /usr/local/x-ui/x-ui cert -webCert "$cert_dir/fullchain.pem" -webCertKey "$cert_dir/privkey.pem"
-
-    # 自动写入订阅证书路径到数据库
-    /usr/local/x-ui/x-ui setting -subCertFile "$cert_dir/fullchain.pem" -subKeyFile "$cert_dir/privkey.pem"
-
-    # 自动续期功能：设置acme.sh自动续期（每2个月执行一次）
-    if ! crontab -l 2>/dev/null | grep -q 'acme.sh --cron'; then
-        # 每2个月1号凌晨3点自动续期
-        (crontab -l 2>/dev/null; echo "0 3 1 */2 * ~/.acme.sh/acme.sh --cron --home ~/.acme.sh > /dev/null") | crontab -
-        LOGI "已设置acme.sh自动续期定时任务（每2个月1号凌晨3点自动续期）"
-    fi
-
-    # 安装并配置 nginx 伪装站点
-    install_nginx_with_cert "$install_domain" "$cert_dir/fullchain.pem" "$cert_dir/privkey.pem"
-
-    # 原有安装流程 bash <(curl -Ls https://raw.githubusercontent.com/MHSanaei/3x-ui/main/install.sh)
+    # 直接调用 install.sh，去除端口检查、SSL 证书申请等重复逻辑
     bash <(curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/main/install.sh)
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
