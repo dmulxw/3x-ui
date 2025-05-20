@@ -32,7 +32,8 @@
 ## Install & Upgrade
 
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh)
+curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh | sudo bash
+
 ```
 
 ## Install legacy Version (we don't recommend)
