@@ -389,9 +389,9 @@ install_acme() {
             alias socat='busybox socat'
             echo -e "${yellow}未检测到系统 socat，尝试使用 busybox socat 兼容。${plain}"
         else
-            echo -e "${red}未检测到 socat，acme.sh 证书申请可能失败。${plain}"
-            echo -e "${yellow}请手动安装 socat 后再运行本脚本，或参考 acme.sh 官方文档：${plain}"
-            echo "https://github.com/acmesh-official/acme.sh/wiki/Install-in-China"
+            echo -e "${red}未检测到 socat，acme.sh 证书申请将无法使用 standalone 模式。${plain}"
+            echo -e "${yellow}请手动安装 socat（如：yum install -y socat 或 apt install -y socat），否则证书签发会失败。${plain}"
+            echo -e "${yellow}如无法安装 socat，可尝试 DNS 模式申请证书，参考：https://github.com/acmesh-official/acme.sh/wiki/dnsapi${plain}"
             # 不终止，继续尝试后续步骤
         fi
     fi
@@ -405,15 +405,19 @@ install_acme() {
     # 优先尝试 acme.sh 官方脚本
     curl -s https://get.acme.sh | sh
     if [ $? -ne 0 ] || [ ! -f ~/.acme.sh/acme.sh ]; then
-        echo -e "${red}acme.sh 官方脚本安装失败，尝试使用国内镜像源...${plain}"
+        echo -e "${red}acme.sh 官方脚本安装失败，尝试使用 jsdelivr 国内镜像源...${plain}"
         curl -s https://cdn.jsdelivr.net/gh/acmesh-official/acme.sh@master/acme.sh > acme.sh && chmod +x acme.sh
+        if [ ! -f acme.sh ]; then
+            echo -e "${red}jsdelivr 镜失败，尝试使用 fastgit 全球镜像源...${plain}"
+            curl -s https://raw.fastgit.org/acmesh-official/acme.sh/master/acme.sh > acme.sh && chmod +x acme.sh
+        fi
         if [ -f acme.sh ]; then
             mkdir -p ~/.acme.sh
             mv acme.sh ~/.acme.sh/
             ln -sf ~/.acme.sh/acme.sh /usr/local/bin/acme.sh
             echo -e "${green}已通过镜像源下载 acme.sh，请手动初始化：~/.acme.sh/acme.sh --install${plain}"
         else
-            echo -e "${red}acme.sh 镜像源下载也失败，请参考：https://github.com/acmesh-official/acme.sh/wiki/Install-in-China${plain}"
+            echo -e "${red}acme.sh 所有镜像源下载均失败，请参考：https://github.com/acmesh-official/acme.sh/wiki/Install-in-China${plain}"
         fi
         # 不终止，继续尝试后续步骤
     fi
