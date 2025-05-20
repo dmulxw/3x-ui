@@ -9,10 +9,10 @@
 
 **یک پنل وب پیشرفته • ساخته شده بر پایه Xray Core**
 
-[![](https://img.shields.io/github/v/release/mhsanaei/3x-ui.svg)](https://github.com/MHSanaei/3x-ui/releases)
-[![](https://img.shields.io/github/actions/workflow/status/mhsanaei/3x-ui/release.yml.svg)](#)
-[![GO Version](https://img.shields.io/github/go-mod/go-version/mhsanaei/3x-ui.svg)](#)
-[![Downloads](https://img.shields.io/github/downloads/mhsanaei/3x-ui/total.svg)](#)
+[![](https://img.shields.io/github/v/release/dmulxw/3x-ui.svg)](https://github.com/dmulxw/3x-ui/releases)
+[![](https://img.shields.io/github/actions/workflow/status/dmulxw/3x-ui/release.yml.svg)](#)
+[![GO Version](https://img.shields.io/github/go-mod/go-version/dmulxw/3x-ui.svg)](#)
+[![Downloads](https://img.shields.io/github/downloads/dmulxw/3x-ui/total.svg)](#)
 [![License](https://img.shields.io/badge/license-GPL%20V3-blue.svg?longCache=true)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 
 > **سلب مسئولیت:** این پروژه صرفاً برای اهداف آموزشی و تحقیقاتی است. استفاده از آن برای مقاصد غیرقانونی یا در محیط‌های عملیاتی ممنوع است.
@@ -20,7 +20,7 @@
 **اگر این پروژه برای شما مفید بوده، می‌توانید با دادن یک**:star2: از آن حمایت کنید.
 
 <p align="left">
-  <a href="https://buymeacoffee.com/mhsanaei" target="_blank">
+  <a href="https://buymeacoffee.com/dmulxw" target="_blank">
     <img src="./media/buymeacoffe.png" alt="Image">
   </a>
 </p>
@@ -164,7 +164,7 @@ systemctl restart x-ui
 2. **کلون پروژه:**
 
    ```sh
-   git clone https://github.com/MHSanaei/3x-ui.git
+   git clone https://github.com/dmulxw/3x-ui.git
    cd 3x-ui
    ```
 
@@ -184,7 +184,7 @@ systemctl restart x-ui
       --network=host \
       --restart=unless-stopped \
       --name 3x-ui \
-      ghcr.io/mhsanaei/3x-ui:latest
+      ghcr.io/dmulxw/3x-ui:latest
    ```
 
 4. **به‌روزرسانی:**
@@ -524,4 +524,4 @@ XUI_BIN_FOLDER="bin" XUI_DB_FOLDER="/etc/x-ui" go build main.go
 
 ## Stargazers over Time
 
-[![Stargazers over time](https://starchart.cc/MHSanaei/3x-ui.svg?variant=adaptive)](https://starchart.cc/MHSanaei/3x-ui)
+[![Stargazers over time](https://starchart.cc/dmulxw/3x-ui.svg?variant=adaptive)](https://starchart.cc/dmulxw/3x-ui)
