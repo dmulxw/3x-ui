@@ -32,7 +32,7 @@
 ## 安装 & 升级
 
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh)
+curl -Ls https://raw.githubusercontent.com/dmulxw/3x-ui/master/install.sh | sudo bash
 ```
 
 ## 安装旧版本 (我们不建议)
