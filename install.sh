@@ -397,6 +397,27 @@ install_acme() {
         echo "https://github.com/acmesh-official/acme.sh/wiki/Install-in-China"
         # 不终止安装，继续往下执行
     fi
+    # 检查 socat 是否存在，否则尝试自动安装
+    if ! command -v socat >/dev/null 2>&1; then
+        echo -e "${yellow}未检测到 socat，正在尝试自动安装...${plain}"
+        if command -v yum >/dev/null 2>&1; then
+            yum install -y socat
+        elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y socat
+        elif command -v apt-get >/dev/null 2>&1; then
+            apt-get update && apt-get install -y socat
+        elif command -v pacman >/dev/null 2>&1; then
+            pacman -Sy --noconfirm socat
+        elif command -v zypper >/dev/null 2>&1; then
+            zypper install -y socat
+        fi
+    fi
+    if ! command -v socat >/dev/null 2>&1; then
+        echo -e "${red}acme.sh 申请证书需要 socat 工具，自动安装失败。${plain}"
+        echo -e "${yellow}请手动安装 socat 后再运行本脚本，或参考 acme.sh 官方文档：${plain}"
+        echo "https://github.com/acmesh-official/acme.sh/wiki/Install-in-China"
+        # 不终止安装，继续往下执行
+    fi
     if command -v ~/.acme.sh/acme.sh &>/dev/null; then
         echo -e "${green}acme.sh 已安装${plain}"
         return 0
@@ -407,7 +428,6 @@ install_acme() {
     curl -s https://get.acme.sh | sh
     if [ $? -ne 0 ] || [ ! -f ~/.acme.sh/acme.sh ]; then
         echo -e "${red}acme.sh 官方脚本安装失败，尝试使用国内镜像源...${plain}"
-        # 尝试使用腾讯云镜像
         curl -s https://cdn.jsdelivr.net/gh/acmesh-official/acme.sh@master/acme.sh > acme.sh && chmod +x acme.sh
         if [ -f acme.sh ]; then
             mkdir -p ~/.acme.sh
