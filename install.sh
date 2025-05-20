@@ -172,6 +172,23 @@ config_after_install() {
     local existing_webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
     local existing_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
     local server_ip=$(curl -s https://api.ipify.org)
+    # 修正端口号为0或空的情况
+    if [[ -z "$existing_port" || "$existing_port" == "0" ]]; then
+        # 尝试从配置文件读取端口
+        if [[ -f /usr/local/x-ui/data/config.json ]]; then
+            existing_port=$(grep -o '"port":[ ]*[0-9]\+' /usr/local/x-ui/data/config.json | head -n1 | grep -o '[0-9]\+')
+        fi
+        # 如果还是没有，给一个默认端口
+        if [[ -z "$existing_port" || "$existing_port" == "0" ]]; then
+            existing_port="54321"
+        fi
+    fi
+
+    # 检查是否有用户输入的域名
+    local panel_domain=""
+    if [[ -f /tmp/xui_panel_domain ]]; then
+        panel_domain=$(cat /tmp/xui_panel_domain)
+    fi
 
     if [[ ${#existing_webBasePath} -lt 4 ]]; then
         if [[ "$existing_username" == "admin" && "$existing_password" == "admin" ]]; then
@@ -189,13 +206,19 @@ config_after_install() {
             fi
 
             /usr/local/x-ui/x-ui setting -username "${config_username}" -password "${config_password}" -port "${config_port}" -webBasePath "${config_webBasePath}"
+            # 更新端口变量
+            existing_port="${config_port}"
             echo -e "This is a fresh installation, generating random login info for security concerns:"
             echo -e "###############################################"
             echo -e "${green}Username: ${config_username}${plain}"
             echo -e "${green}Password: ${config_password}${plain}"
             echo -e "${green}Port: ${config_port}${plain}"
             echo -e "${green}WebBasePath: ${config_webBasePath}${plain}"
-            echo -e "${green}Access URL: http://${server_ip}:${config_port}/${config_webBasePath}${plain}"
+            if [[ -n "$panel_domain" ]]; then
+                echo -e "${green}Access URL: http://${panel_domain}:${config_port}/${config_webBasePath}${plain}"
+            else
+                echo -e "${green}Access URL: http://${server_ip}:${config_port}/${config_webBasePath}${plain}"
+            fi
             echo -e "###############################################"
             echo -e "${yellow}If you forgot your login info, you can type 'x-ui settings' to check${plain}"
         else
@@ -203,7 +226,11 @@ config_after_install() {
             echo -e "${yellow}WebBasePath is missing or too short. Generating a new one...${plain}"
             /usr/local/x-ui/x-ui setting -webBasePath "${config_webBasePath}"
             echo -e "${green}New WebBasePath: ${config_webBasePath}${plain}"
-            echo -e "${green}Access URL: http://${server_ip}:${existing_port}/${config_webBasePath}${plain}"
+            if [[ -n "$panel_domain" ]]; then
+                echo -e "${green}Access URL: http://${panel_domain}:${existing_port}/${config_webBasePath}${plain}"
+            else
+                echo -e "${green}Access URL: http://${server_ip}:${existing_port}/${config_webBasePath}${plain}"
+            fi
         fi
     else
         if [[ "$existing_username" == "admin" && "$existing_password" == "admin" ]]; then
@@ -390,7 +417,17 @@ install_acme() {
             echo -e "${yellow}未检测到系统 socat，尝试使用 busybox socat 兼容。${plain}"
         else
             echo -e "${red}未检测到 socat，acme.sh 证书申请将无法使用 standalone 模式。${plain}"
-            echo -e "${yellow}请手动安装 socat（如：yum install -y socat 或 apt install -y socat），否则证书签发会失败。${plain}"
+            echo -e "${yellow}请手动安装 socat，否则证书签发会失败。${plain}"
+            echo -e "${yellow}CentOS/RHEL/AlmaLinux/Rocky:  yum install -y socat"
+            echo -e "Debian/Ubuntu:                apt-get install -y socat"
+            echo -e "如 yum/apt 源不可用，可手动下载 socat rpm 或 deb 包离线安装："
+            echo -e "CentOS 8 rpm: https://mirrors.aliyun.com/centos/8/AppStream/x86_64/os/Packages/socat-1.7.3.3-2.el8.x86_64.rpm"
+            echo -e "Debian 11 deb: https://mirrors.edge.kernel.org/debian/pool/main/s/socat/socat_1.7.4.1-3_amd64.deb"
+            echo -e "下载后执行（以 rpm 为例）："
+            echo -e "rpm -ivh socat-*.rpm"
+            echo -e "或（以 deb 为例）："
+            echo -e "dpkg -i socat_*.deb"
+            echo -e "更多获取方式见：https://pkgs.org/search/?q=socat"
             echo -e "${yellow}如无法安装 socat，可尝试 DNS 模式申请证书，参考：https://github.com/acmesh-official/acme.sh/wiki/dnsapi${plain}"
             # 不终止，继续尝试后续步骤
         fi
@@ -530,6 +567,8 @@ auto_ssl_and_nginx() {
         read -r domain < /dev/tty
         # 域名校验：包含至少一个点且不是首尾，且后缀长度>=2
         if [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
+            # 保存域名用于后续 config_after_install 输出
+            echo "$domain" > /tmp/xui_panel_domain
             break
         else
             echo -e "${red}域名格式不正确，请重新输入。${plain}"
