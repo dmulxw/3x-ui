@@ -208,6 +208,22 @@ config_after_install() {
             /usr/local/x-ui/x-ui setting -username "${config_username}" -password "${config_password}" -port "${config_port}" -webBasePath "${config_webBasePath}"
             # 更新端口变量
             existing_port="${config_port}"
+            # 保存信息到临时文件
+            {
+                echo "###############################################"
+                echo -e "${green}Username: ${config_username}${plain}"
+                echo -e "${green}Password: ${config_password}${plain}"
+                echo -e "${green}Port: ${config_port}${plain}"
+                echo -e "${green}WebBasePath: ${config_webBasePath}${plain}"
+                if [[ -n "$panel_domain" ]]; then
+                    echo -e "${green}Access URL: http://${panel_domain}:${config_port}/${config_webBasePath}${plain}"
+                else
+                    echo -e "${green}Access URL: http://${server_ip}:${config_port}/${config_webBasePath}${plain}"
+                fi
+                echo "###############################################"
+            } > /tmp/xui_install_info
+            # 更新端口变量
+            existing_port="${config_port}"
             echo -e "This is a fresh installation, generating random login info for security concerns:"
             echo -e "###############################################"
             echo -e "${green}Username: ${config_username}${plain}"
@@ -226,11 +242,17 @@ config_after_install() {
             echo -e "${yellow}WebBasePath is missing or too short. Generating a new one...${plain}"
             /usr/local/x-ui/x-ui setting -webBasePath "${config_webBasePath}"
             echo -e "${green}New WebBasePath: ${config_webBasePath}${plain}"
-            if [[ -n "$panel_domain" ]]; then
-                echo -e "${green}Access URL: http://${panel_domain}:${existing_port}/${config_webBasePath}${plain}"
-            else
-                echo -e "${green}Access URL: http://${server_ip}:${existing_port}/${config_webBasePath}${plain}"
-            fi
+            # 保存信息到临时文件
+            {
+                echo "###############################################"
+                echo -e "${green}WebBasePath: ${config_webBasePath}${plain}"
+                if [[ -n "$panel_domain" ]]; then
+                    echo -e "${green}Access URL: http://${panel_domain}:${existing_port}/${config_webBasePath}${plain}"
+                else
+                    echo -e "${green}Access URL: http://${server_ip}:${existing_port}/${config_webBasePath}${plain}"
+                fi
+                echo "###############################################"
+            } > /tmp/xui_install_info
         fi
     else
         if [[ "$existing_username" == "admin" && "$existing_password" == "admin" ]]; then
@@ -239,17 +261,24 @@ config_after_install() {
 
             echo -e "${yellow}Default credentials detected. Security update required...${plain}"
             /usr/local/x-ui/x-ui setting -username "${config_username}" -password "${config_password}"
-            echo -e "Generated new random login credentials:"
-            echo -e "###############################################"
-            echo -e "${green}Username: ${config_username}${plain}"
-            echo -e "${green}Password: ${config_password}${plain}"
-            echo -e "###############################################"
+            # 保存信息到临时文件
+            {
+                echo "###############################################"
+                echo -e "${green}Username: ${config_username}${plain}"
+                echo -e "${green}Password: ${config_password}${plain}"
+                echo "###############################################"
+            } > /tmp/xui_install_info
             echo -e "${yellow}If you forgot your login info, you can type 'x-ui settings' to check${plain}"
         else
             echo -e "${green}Username, Password, and WebBasePath are properly set. Exiting...${plain}"
+            # 保存信息到临时文件
+            {
+                echo "###############################################"
+                echo -e "${green}Username, Password, and WebBasePath are properly set.${plain}"
+                echo "###############################################"
+            } > /tmp/xui_install_info
         fi
     fi
-
     /usr/local/x-ui/x-ui migrate
 }
 
@@ -612,16 +641,44 @@ auto_ssl_and_nginx() {
     ~/.acme.sh/acme.sh --installcert -d "$domain" \
         --key-file "$cert_dir/privkey.pem" \
         --fullchain-file "$cert_dir/fullchain.pem"
-    # 自动写入证书路径到x-ui配置
-    /usr/local/x-ui/x-ui cert -webCert "$cert_dir/fullchain.pem" -webCertKey "$cert_dir/privkey.pem"
-    /usr/local/x-ui/x-ui setting -subCertFile "$cert_dir/fullchain.pem" -subKeyFile "$cert_dir/privkey.pem"
+
+    # 检查acme.sh ECC证书文件是否存在，优先直接写入x-ui配置
+    acme_ecc_dir="$HOME/.acme.sh/${domain}_ecc"
+    if [[ -f "$acme_ecc_dir/${domain}.cer" && -f "$acme_ecc_dir/${domain}.key" ]]; then
+        /usr/local/x-ui/x-ui cert -webCert "$acme_ecc_dir/${domain}.cer" -webCertKey "$acme_ecc_dir/${domain}.key"
+        /usr/local/x-ui/x-ui setting -subCertFile "$acme_ecc_dir/${domain}.cer" -subKeyFile "$acme_ecc_dir/${domain}.key"
+        cert_file="$acme_ecc_dir/${domain}.cer"
+        key_file="$acme_ecc_dir/${domain}.key"
+        echo -e "${green}已直接使用acme.sh ECC证书文件配置x-ui${plain}"
+    else
+        acme_rsa_dir="$HOME/.acme.sh/${domain}"
+        if [[ -f "$acme_rsa_dir/fullchain.cer" && -f "$acme_rsa_dir/${domain}.key" ]]; then
+            /usr/local/x-ui/x-ui cert -webCert "$acme_rsa_dir/fullchain.cer" -webCertKey "$acme_rsa_dir/${domain}.key"
+            /usr/local/x-ui/x-ui setting -subCertFile "$acme_rsa_dir/fullchain.cer" -subKeyFile "$acme_rsa_dir/${domain}.key"
+            cert_file="$acme_rsa_dir/fullchain.cer"
+            key_file="$acme_rsa_dir/${domain}.key"
+            echo -e "${green}已直接使用acme.sh RSA证书文件配置x-ui${plain}"
+        else
+            echo -e "${red}未找到可用的证书文件，请手动检查acme.sh输出和证书路径${plain}"
+            exit 1
+        fi
+    fi
+
     # 自动续期
     if ! crontab -l 2>/dev/null | grep -q 'acme.sh --cron'; then
         (crontab -l 2>/dev/null; echo "0 3 1 */2 * ~/.acme.sh/acme.sh --cron --home ~/.acme.sh > /dev/null") | crontab -
         echo -e "${green}已设置acme.sh自动续期定时任务（每2个月1号凌晨3点自动续期）${plain}"
     fi
-    # 安装并配置nginx
-    install_nginx_with_cert "$domain" "$cert_dir/fullchain.pem" "$cert_dir/privkey.pem"
+    # 安装并配置nginx，传递实际证书路径
+    install_nginx_with_cert "$domain" "$cert_file" "$key_file"
+
+    # 安装结束后统一输出登录信息
+    if [[ -f /tmp/xui_install_info ]]; then
+        echo -e "\n${yellow}面板登录信息如下，请妥善保存：${plain}"
+        cat /tmp/xui_install_info
+        rm -f /tmp/xui_install_info
+    fi
+
     # 显示客户端下载地址
     echo -e "${green}客户端下载地址：${plain}"
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg"
