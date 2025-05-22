@@ -591,6 +591,11 @@ install_nginx_with_cert() {
     local domain="$1"
     local cert="$2"
     local key="$3"
+    # 获取 webBasePath 和端口
+    local webBasePath
+    webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
+    local panel_port
+    panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
     # 安装 nginx
     if ! command -v nginx &>/dev/null; then
         case "${release}" in
@@ -633,8 +638,8 @@ server {
         root /var/www/default_site;
         index index.html;
     }
-    location /panel/ {
-        proxy_pass http://127.0.0.1:54321/;
+    location /${webBasePath}/ {
+        proxy_pass http://127.0.0.1:${panel_port}/${webBasePath}/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
