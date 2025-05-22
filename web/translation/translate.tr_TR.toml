@@ -112,6 +112,7 @@
 "backupDescription" = "Veritabanını geri yüklemeden önce yedek almanız önerilir."
 "exportDatabase" = "Yedekle"
 "importDatabase" = "Geri Yükle"
+"clientDownload" = "İstemci İndir"
 
 [pages.inbounds]
 "title" = "Gelenler"

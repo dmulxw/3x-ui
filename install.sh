@@ -115,6 +115,7 @@ install_base() {
     centos | almalinux | rocky | ol)
         # 检查主源可用性
         if ! curl -s --connect-timeout 3 http://mirror.centos.org/centos/8/os/x86_64/repodata/repomd.xml >/dev/null; then
+            echo -e "${yellow}The official CentOS mirror is unavailable, trying to switch to Tsinghua or Aliyun mirror...${plain}"
             echo -e "${yellow}检测到官方源不可用，尝试切换到清华或阿里云镜像源...${plain}"
             # 优先切换到清华源
             if curl -s --connect-timeout 3 https://mirrors.tuna.tsinghua.edu.cn/centos/8/os/x86_64/repodata/repomd.xml >/dev/null; then
@@ -122,6 +123,7 @@ install_base() {
                     -e 's|^#baseurl=http://mirror.centos.org|baseurl=https://mirrors.tuna.tsinghua.edu.cn|g' \
                     -i.bak \
                     /etc/yum.repos.d/CentOS-*.repo
+                echo -e "${green}Switched to Tsinghua mirror.${plain}"
                 echo -e "${green}已切换到清华镜像源${plain}"
             else
                 # 切换到阿里云
@@ -129,6 +131,7 @@ install_base() {
                     -e 's|^#baseurl=http://mirror.centos.org|baseurl=https://mirrors.aliyun.com|g' \
                     -i.bak \
                     /etc/yum.repos.d/CentOS-*.repo
+                echo -e "${green}Switched to Aliyun mirror.${plain}"
                 echo -e "${green}已切换到阿里云镜像源${plain}"
             fi
             dnf clean all
@@ -400,7 +403,7 @@ check_firewall_ports() {
             fi
         done
         if [[ $need_open -eq 1 ]]; then
-            echo -e "${green}防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
+            echo -e "${green}The firewall has automatically opened port 80 and port 443. If you need to close them, please execute:,防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
         fi
     fi
     # firewalld
@@ -414,7 +417,7 @@ check_firewall_ports() {
             fi
         done
         if [[ $need_open -eq 1 ]]; then
-            echo -e "${green}防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
+            echo -e "${green}The firewall has automatically opened port 80 and port 443. If you need to close them, please execute:.防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
         fi
     fi
 }
@@ -424,7 +427,7 @@ check_port_occupied() {
         local pinfo
         pinfo=$(lsof -i :$port -sTCP:LISTEN 2>/dev/null | grep -v "COMMAND")
         if [[ -n "$pinfo" ]]; then
-            echo -e "${red}端口${port}已被占用，相关进程如下：${plain}"
+            echo -e "${red} 端口${port}已被占用，相关进程如下：${plain}"
             echo "$pinfo"
             exit 1
         fi
@@ -434,7 +437,9 @@ check_port_occupied() {
 install_acme() {
     # 检查 tar 是否存在，否则提示
     if ! command -v tar >/dev/null 2>&1; then
+        echo -e "${red}tar not detected, acme.sh and certificate features will not work.${plain}"
         echo -e "${red}未检测到 tar，acme.sh 及证书功能将无法使用。${plain}"
+        echo -e "${yellow}Please install tar manually and rerun this script, or refer to the acme.sh official documentation:${plain}"
         echo -e "${yellow}请手动安装 tar 后再运行本脚本，或参考 acme.sh 官方文档：${plain}"
         echo "https://github.com/acmesh-official/acme.sh/wiki/Install-in-China"
         # 不终止，继续尝试后续步骤
@@ -443,37 +448,48 @@ install_acme() {
     if ! command -v socat >/dev/null 2>&1; then
         if command -v busybox >/dev/null 2>&1 && busybox | grep -q socat; then
             alias socat='busybox socat'
+            echo -e "${yellow}System socat not detected, trying to use busybox socat as a replacement.${plain}"
             echo -e "${yellow}未检测到系统 socat，尝试使用 busybox socat 兼容。${plain}"
         else
+            echo -e "${red}socat not detected, acme.sh certificate issuance will not work in standalone mode.${plain}"
             echo -e "${red}未检测到 socat，acme.sh 证书申请将无法使用 standalone 模式。${plain}"
+            echo -e "${yellow}Please install socat manually, otherwise certificate issuance will fail.${plain}"
             echo -e "${yellow}请手动安装 socat，否则证书签发会失败。${plain}"
             echo -e "${yellow}CentOS/RHEL/AlmaLinux/Rocky:  yum install -y socat"
             echo -e "Debian/Ubuntu:                apt-get install -y socat"
+            echo -e "If yum/apt sources are unavailable, you can manually download socat rpm or deb packages for offline installation:"
             echo -e "如 yum/apt 源不可用，可手动下载 socat rpm 或 deb 包离线安装："
             echo -e "CentOS 8 rpm: https://mirrors.aliyun.com/centos/8/AppStream/x86_64/os/Packages/socat-1.7.3.3-2.el8.x86_64.rpm"
             echo -e "Debian 11 deb: https://mirrors.edge.kernel.org/debian/pool/main/s/socat/socat_1.7.4.1-3_amd64.deb"
+            echo -e "After downloading, execute (for rpm):"
             echo -e "下载后执行（以 rpm 为例）："
             echo -e "rpm -ivh socat-*.rpm"
+            echo -e "Or (for deb):"
             echo -e "或（以 deb 为例）："
             echo -e "dpkg -i socat_*.deb"
+            echo -e "More ways to get socat: https://pkgs.org/search/?q=socat"
             echo -e "更多获取方式见：https://pkgs.org/search/?q=socat"
+            echo -e "${yellow}If you cannot install socat, you can try DNS mode to apply for a certificate, refer to:${plain}"
             echo -e "${yellow}如无法安装 socat，可尝试 DNS 模式申请证书，参考：https://github.com/acmesh-official/acme.sh/wiki/dnsapi${plain}"
             # 不终止，继续尝试后续步骤
         fi
     fi
     # 检查 acme.sh 是否已安装
     if command -v ~/.acme.sh/acme.sh &>/dev/null; then
+        echo -e "${green}acme.sh is already installed.${plain}"
         echo -e "${green}acme.sh 已安装${plain}"
         return 0
     fi
+    echo -e "${yellow}Installing acme.sh...${plain}"
     echo -e "${yellow}正在安装 acme.sh...${plain}"
-    cd ~ || return 1
     # 优先尝试 acme.sh 官方脚本
     curl -s https://get.acme.sh | sh
     if [ $? -ne 0 ] || [ ! -f ~/.acme.sh/acme.sh ]; then
+        echo -e "${red}acme.sh official script installation failed, trying jsdelivr China mirror...${plain}"
         echo -e "${red}acme.sh 官方脚本安装失败，尝试使用 jsdelivr 国内镜像源...${plain}"
         curl -s https://cdn.jsdelivr.net/gh/acmesh-official/acme.sh@master/acme.sh > acme.sh && chmod +x acme.sh
         if [ ! -f acme.sh ]; then
+            echo -e "${red}jsdelivr mirror failed, trying fastgit global mirror...${plain}"
             echo -e "${red}jsdelivr 镜失败，尝试使用 fastgit 全球镜像源...${plain}"
             curl -s https://raw.fastgit.org/acmesh-official/acme.sh/master/acme.sh > acme.sh && chmod +x acme.sh
         fi
@@ -481,8 +497,10 @@ install_acme() {
             mkdir -p ~/.acme.sh
             mv acme.sh ~/.acme.sh/
             ln -sf ~/.acme.sh/acme.sh /usr/local/bin/acme.sh
+            echo -e "${green}acme.sh downloaded via mirror, please initialize manually: ~/.acme.sh/acme.sh --install${plain}"
             echo -e "${green}已通过镜像源下载 acme.sh，请手动初始化：~/.acme.sh/acme.sh --install${plain}"
         else
+            echo -e "${red}All acme.sh mirrors failed, please refer to: https://github.com/acmesh-official/acme.sh/wiki/Install-in-China${plain}"
             echo -e "${red}acme.sh 所有镜像源下载均失败，请参考：https://github.com/acmesh-official/acme.sh/wiki/Install-in-China${plain}"
         fi
         # 不终止，继续尝试后续步骤
@@ -542,7 +560,7 @@ install_nginx_with_cert() {
             pacman -Sy --noconfirm nginx
             ;;
         *)
-            echo -e "${red}不支持的系统，请手动安装 nginx${plain}"
+            echo -e "${red}not support system.不支持的系统，请手动安装 nginx${plain}"
             return 1
             ;;
         esac
@@ -592,6 +610,7 @@ auto_ssl_and_nginx() {
     local domain=""
     local email=""
     while true; do
+        echo -e "${yellow}Please enter the domain name for SSL certificate application (e.g. example.com):${plain}"
         echo -e "${yellow}请输入用于申请证书的域名（如 example.com）：${plain}"
         read -r domain < /dev/tty
         # 域名校验：包含至少一个点且不是首尾，且后缀长度>=2
@@ -600,9 +619,11 @@ auto_ssl_and_nginx() {
             echo "$domain" > /tmp/xui_panel_domain
             break
         else
+            echo -e "${red}Invalid domain format, please try again.${plain}"
             echo -e "${red}域名格式不正确，请重新输入。${plain}"
             retry=$((retry+1))
             if [[ $retry -ge 2 ]]; then
+                echo "Too many input errors, setup aborted."
                 echo "输入错误次数过多，安装中止。"
                 exit 1
             fi
@@ -610,15 +631,18 @@ auto_ssl_and_nginx() {
     done
     retry=0
     while true; do
+        echo -e "${yellow}Please enter your email address (for Let's Encrypt notifications):${plain}"
         echo -e "${yellow}请输入联系邮箱（Let's Encrypt 用于通知证书到期）：${plain}"
         read -r email < /dev/tty
         # 邮箱校验：包含@和.，且后缀长度>=2
         if [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
             break
         else
+            echo -e "${red}Invalid email format, please try again.${plain}"
             echo -e "${red}邮箱格式不正确，请重新输入。${plain}"
             retry=$((retry+1))
             if [[ $retry -ge 2 ]]; then
+                echo "Too many input errors, setup aborted."
                 echo "输入错误次数过多，安装中止。"
                 exit 1
             fi
@@ -626,6 +650,7 @@ auto_ssl_and_nginx() {
     done
     install_acme
     if [ $? -ne 0 ]; then
+        echo -e "${red}acme.sh installation failed.${plain}"
         echo -e "${red}acme.sh 安装失败${plain}"
         exit 1
     fi
@@ -633,6 +658,7 @@ auto_ssl_and_nginx() {
     ~/.acme.sh/acme.sh --register-account -m "$email"
     ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force
     if [ $? -ne 0 ]; then
+        echo -e "${red}Certificate application failed, please check domain resolution and port occupation.${plain}"
         echo -e "${red}证书申请失败，请检查域名解析和端口占用${plain}"
         exit 1
     fi
@@ -649,6 +675,7 @@ auto_ssl_and_nginx() {
         /usr/local/x-ui/x-ui setting -subCertFile "$acme_ecc_dir/${domain}.cer" -subKeyFile "$acme_ecc_dir/${domain}.key"
         cert_file="$acme_ecc_dir/${domain}.cer"
         key_file="$acme_ecc_dir/${domain}.key"
+        echo -e "${green}acme.sh ECC certificate used for x-ui.${plain}"
         echo -e "${green}已直接使用acme.sh ECC证书文件配置x-ui${plain}"
         systemctl restart x-ui
     else
@@ -658,9 +685,11 @@ auto_ssl_and_nginx() {
             /usr/local/x-ui/x-ui setting -subCertFile "$acme_rsa_dir/fullchain.cer" -subKeyFile "$acme_rsa_dir/${domain}.key"
             cert_file="$acme_rsa_dir/fullchain.cer"
             key_file="$acme_rsa_dir/${domain}.key"
+            echo -e "${green}acme.sh RSA certificate used for x-ui.${plain}"
             echo -e "${green}已直接使用acme.sh RSA证书文件配置x-ui${plain}"
             systemctl restart x-ui
         else
+            echo -e "${red}No valid certificate file found, please check acme.sh output and certificate path manually.${plain}"
             echo -e "${red}未找到可用的证书文件，请手动检查acme.sh输出和证书路径${plain}"
             exit 1
         fi
@@ -669,6 +698,7 @@ auto_ssl_and_nginx() {
     # 自动续期
     if ! crontab -l 2>/dev/null | grep -q 'acme.sh --cron'; then
         (crontab -l 2>/dev/null; echo "0 3 1 */2 * ~/.acme.sh/acme.sh --cron --home ~/.acme.sh > /dev/null") | crontab -
+        echo -e "${green}acme.sh auto-renewal scheduled every 2 months.${plain}"
         echo -e "${green}已设置acme.sh自动续期定时任务（每2个月1号凌晨3点自动续期）${plain}"
     fi
     # 安装并配置nginx，传递实际证书路径
@@ -676,7 +706,8 @@ auto_ssl_and_nginx() {
 
     # 安装结束后统一输出登录信息
     if [[ -f /tmp/xui_install_info ]]; then
-        echo -e "\n${yellow}面板登录信息如下，请妥善保存：${plain}"
+        echo -e "\n${yellow}Panel login information below, please keep it safe:${plain}"
+        echo -e "${yellow}面板登录信息如下，请妥善保存：${plain}"
         cat /tmp/xui_install_info
         # 新增：如果有域名和端口，输出域名登录链接
         if [[ -n "$domain" && -n "$cert_file" ]]; then
@@ -690,6 +721,7 @@ auto_ssl_and_nginx() {
             #//    protocol="http"
             #//fi
             if [[ -n "$webBasePath" && -n "$panel_port" ]]; then
+                echo -e "${green}Domain login link: ${protocol}://${domain}:${panel_port}/${webBasePath}${plain}"
                 echo -e "${green}域名登录链接：${protocol}://${domain}:${panel_port}/${webBasePath}${plain}"
             fi
         fi
@@ -697,6 +729,7 @@ auto_ssl_and_nginx() {
     fi
 
     # 显示客户端下载地址
+    echo -e "${green}Client download links:${plain}"
     echo -e "${green}客户端下载地址：${plain}"
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg"
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage"

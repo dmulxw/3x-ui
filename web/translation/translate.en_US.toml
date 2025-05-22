@@ -112,6 +112,7 @@
 "backupDescription" = "It is recommended to make a backup before restoring a database."
 "exportDatabase" = "Back Up"
 "importDatabase" = "Restore"
+"clientDownload" = "Client Download"
 
 [pages.inbounds]
 "title" = "Inbounds"

@@ -112,6 +112,7 @@
 "backupDescription" = "Hãy nhớ sao lưu trước khi nhập cơ sở dữ liệu mới."
 "exportDatabase" = "Tải về Cơ sở dữ liệu"
 "importDatabase" = "Tải lên Cơ sở dữ liệu"
+"clientDownload" = "Tải xuống ứng dụng khách"
 
 [pages.inbounds]
 "title" = "Điểm vào (Inbounds)"

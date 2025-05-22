@@ -112,6 +112,7 @@
 "backupDescription" = "توصیه‌می‌شود قبل‌از واردکردن یک دیتابیس جدید، نسخه پشتیبان تهیه ‌کنید"
 "exportDatabase" = "پشتیبان‌گیری"
 "importDatabase" = "بازگرداندن"
+"clientDownload" = "دانلود کلاینت"
 
 [pages.inbounds]
 "title" = "کاربران"

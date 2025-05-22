@@ -112,6 +112,7 @@
 "backupDescription" = "Рекомендується зробити резервну копію перед відновленням бази даних."
 "exportDatabase" = "Резервне копіювання"
 "importDatabase" = "Відновити"
+"clientDownload" = "Завантажити клієнт"
 
 [pages.inbounds]
 "title" = "Вхідні"

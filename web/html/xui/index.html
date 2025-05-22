@@ -260,29 +260,29 @@
           <a-row>
             <a-col :sm="24">
               <a-card hoverable style="margin-top: 24px;">
-                <b>客户端下载：</b>
+                <b>{{ i18n "pages.index.clientDownload" }}：</b>
                 <ul>
                   <li>
                     <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg" target="_blank">Trojan-Qt5-MacOS.dmg</a>
-                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg" style="margin-left:8px;" title="二维码下载">
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg" style="margin-left:8px;" :title="i18n('pages.index.qrDownload')">
                       <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
                     </a>
                   </li>
                   <li>
                     <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage" target="_blank">Trojan-Qt5-Linux.AppImage</a>
-                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage" style="margin-left:8px;" title="二维码下载">
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage" style="margin-left:8px;" :title="i18n('pages.index.qrDownload')">
                       <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
                     </a>
                   </li>
                   <li>
                     <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z" target="_blank">Trojan-Qt5-Windows.7z</a>
-                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z" style="margin-left:8px;" title="二维码下载">
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z" style="margin-left:8px;" :title="i18n('pages.index.qrDownload')">
                       <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
                     </a>
                   </li>
                   <li>
                     <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk" target="_blank">Igniter-trajon-app-Android-release.apk</a>
-                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk" style="margin-left:8px;" title="二维码下载">
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk" style="margin-left:8px;" :title="i18n('pages.index.qrDownload')">
                       <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
                     </a>
                   </li>
@@ -885,7 +885,7 @@
           qrCanvas.appendChild(qr.image);
           // 设置描述
           var name = btn.previousElementSibling && btn.previousElementSibling.textContent ? btn.previousElementSibling.textContent : '扫码下载';
-          qrDesc.textContent = '扫码下载 ' + name;
+          qrDesc.textContent = 'scan qrcode to download： ' + name;
         };
       });
       if(qrClose && qrModal){
@@ -904,7 +904,7 @@
     <span id="igniter-qr-close" style="position:absolute;right:8px;top:4px;cursor:pointer;font-size:20px;">×</span>
     <div style="text-align:center;">
       <div id="igniter-qr-canvas"></div>
-      <div id="igniter-qr-desc" style="margin-top:8px;font-size:12px;word-break:break-all;">扫码下载</div>
+      <div id="igniter-qr-desc" style="margin-top:8px;font-size:12px;word-break:break-all;">{{ i18n "pages.index.qrScanDownload" }}</div>
     </div>
   </div>
 </div>

@@ -112,6 +112,7 @@
 "backupDescription" = "データベースを復元する前にバックアップすることをお勧めします"
 "exportDatabase" = "バックアップ"
 "importDatabase" = "復元"
+"clientDownload" = "クライアントダウンロード"
 
 [pages.inbounds]
 "title" = "インバウンド一覧"

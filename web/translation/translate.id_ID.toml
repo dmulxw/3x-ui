@@ -112,6 +112,7 @@
 "backupDescription" = "Disarankan untuk membuat cadangan sebelum memulihkan database."
 "exportDatabase" = "Cadangkan"
 "importDatabase" = "Pulihkan"
+"clientDownload" = "Unduh Klien"
 
 [pages.inbounds]
 "title" = "Masuk"

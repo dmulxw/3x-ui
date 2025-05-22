@@ -112,6 +112,7 @@
 "backupDescription" = "恢復資料庫之前建議進行備份"
 "exportDatabase" = "備份"
 "importDatabase" = "恢復"
+"clientDownload" = "客戶端下載"
 
 [pages.inbounds]
 "title" = "入站列表"
