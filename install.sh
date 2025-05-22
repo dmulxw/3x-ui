@@ -596,6 +596,9 @@ install_nginx_with_cert() {
     webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
     local panel_port
     panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
+    # 去除首尾斜杠
+    webBasePath="${webBasePath#/}"
+    webBasePath="${webBasePath%/}"
     # 安装 nginx
     if ! command -v nginx &>/dev/null; then
         case "${release}" in
@@ -706,44 +709,96 @@ auto_ssl_and_nginx() {
         echo -e "${red}acme.sh 安装失败${plain}"
         exit 1
     fi
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-    ~/.acme.sh/acme.sh --register-account -m "$email"
-    ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force
-    if [ $? -ne 0 ]; then
-        echo -e "${red}Certificate application failed, please check domain resolution and port occupation.${plain}"
-        echo -e "${red}证书申请失败，请检查域名解析和端口占用${plain}"
-        exit 1
-    fi
-    cert_dir="/root/cert/${domain}"
-    mkdir -p "$cert_dir"
-    ~/.acme.sh/acme.sh --installcert -d "$domain" \
-        --key-file "$cert_dir/privkey.pem" \
-        --fullchain-file "$cert_dir/fullchain.pem"
 
-    # 检查acme.sh ECC证书文件是否存在，优先直接写入x-ui配置
+    # 检查本地已有证书且有效期大于60天则复用
     acme_ecc_dir="$HOME/.acme.sh/${domain}_ecc"
-    if [[ -f "$acme_ecc_dir/${domain}.cer" && -f "$acme_ecc_dir/${domain}.key" ]]; then
-        /usr/local/x-ui/x-ui cert -webCert "$acme_ecc_dir/${domain}.cer" -webCertKey "$acme_ecc_dir/${domain}.key"
-        /usr/local/x-ui/x-ui setting -subCertFile "$acme_ecc_dir/${domain}.cer" -subKeyFile "$acme_ecc_dir/${domain}.key"
-        cert_file="$acme_ecc_dir/${domain}.cer"
-        key_file="$acme_ecc_dir/${domain}.key"
-        echo -e "${green}acme.sh ECC certificate used for x-ui.${plain}"
-        echo -e "${green}已直接使用acme.sh ECC证书文件配置x-ui${plain}"
+    acme_rsa_dir="$HOME/.acme.sh/${domain}"
+    cert_file=""
+    key_file=""
+    reuse_cert=0
+    if [[ -f "$acme_ecc_dir/${domain}.cer" ]]; then
+        # 检查有效期
+        end_date=$(openssl x509 -in "$acme_ecc_dir/${domain}.cer" -noout -enddate 2>/dev/null | cut -d= -f2)
+        if [[ -n "$end_date" ]]; then
+            end_ts=$(date -d "$end_date" +%s)
+            now_ts=$(date +%s)
+            remain_days=$(( (end_ts - now_ts) / 86400 ))
+            if [[ $remain_days -gt 60 ]]; then
+                echo -e "${green}Found existing ECC certificate, valid for $remain_days days, will reuse.${plain}"
+                cert_file="$acme_ecc_dir/${domain}.cer"
+                key_file="$acme_ecc_dir/${domain}.key"
+                reuse_cert=1
+            fi
+        fi
+    fi
+    if [[ $reuse_cert -eq 0 && -f "$acme_rsa_dir/fullchain.cer" ]]; then
+        end_date=$(openssl x509 -in "$acme_rsa_dir/fullchain.cer" -noout -enddate 2>/dev/null | cut -d= -f2)
+        if [[ -n "$end_date" ]]; then
+            end_ts=$(date -d "$end_date" +%s)
+            now_ts=$(date +%s)
+            remain_days=$(( (end_ts - now_ts) / 86400 ))
+            if [[ $remain_days -gt 60 ]]; then
+                echo -e "${green}Found existing RSA certificate, valid for $remain_days days, will reuse.${plain}"
+                cert_file="$acme_rsa_dir/fullchain.cer"
+                key_file="$acme_rsa_dir/${domain}.key"
+                reuse_cert=1
+            fi
+        fi
+    fi
+
+    if [[ $reuse_cert -eq 0 ]]; then
+        ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+        ~/.acme.sh/acme.sh --register-account -m "$email"
+        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force
+        if [ $? -ne 0 ]; then
+            echo -e "${red}Certificate application failed, please check domain resolution and port occupation.${plain}"
+            echo -e "${red}证书申请失败，请检查域名解析和端口占用${plain}"
+            echo -e "${yellow}If you have previously applied for a certificate, you can manually use the files in:${plain}"
+            echo -e "${yellow}  $acme_ecc_dir/  或  $acme_rsa_dir/${plain}"
+            echo -e "${yellow}  Example: cert: ${acme_ecc_dir}/${domain}.cer  key: ${acme_ecc_dir}/${domain}.key${plain}"
+            echo -e "${yellow}You can also check certificate expiration with:${plain}"
+            echo -e "${yellow}  openssl x509 -in <your_cert_file> -noout -enddate${plain}"
+            exit 1
+        fi
+        cert_dir="/root/cert/${domain}"
+        mkdir -p "$cert_dir"
+        ~/.acme.sh/acme.sh --installcert -d "$domain" \
+            --key-file "$cert_dir/privkey.pem" \
+            --fullchain-file "$cert_dir/fullchain.pem"
+    fi
+
+    # 后续优先使用 cert_file/key_file，如果为空再走原有逻辑
+    if [[ -n "$cert_file" && -n "$key_file" ]]; then
+        /usr/local/x-ui/x-ui cert -webCert "$cert_file" -webCertKey "$key_file"
+        /usr/local/x-ui/x-ui setting -subCertFile "$cert_file" -subKeyFile "$key_file"
+        echo -e "${green}Certificate configured for x-ui: $cert_file${plain}"
         systemctl restart x-ui
     else
-        acme_rsa_dir="$HOME/.acme.sh/${domain}"
-        if [[ -f "$acme_rsa_dir/fullchain.cer" && -f "$acme_rsa_dir/${domain}.key" ]]; then
-            /usr/local/x-ui/x-ui cert -webCert "$acme_rsa_dir/fullchain.cer" -webCertKey "$acme_rsa_dir/${domain}.key"
-            /usr/local/x-ui/x-ui setting -subCertFile "$acme_rsa_dir/fullchain.cer" -subKeyFile "$acme_rsa_dir/${domain}.key"
-            cert_file="$acme_rsa_dir/fullchain.cer"
-            key_file="$acme_rsa_dir/${domain}.key"
-            echo -e "${green}acme.sh RSA certificate used for x-ui.${plain}"
-            echo -e "${green}已直接使用acme.sh RSA证书文件配置x-ui${plain}"
+        # 检查acme.sh ECC证书文件是否存在，优先直接写入x-ui配置
+        acme_ecc_dir="$HOME/.acme.sh/${domain}_ecc"
+        if [[ -f "$acme_ecc_dir/${domain}.cer" && -f "$acme_ecc_dir/${domain}.key" ]]; then
+            /usr/local/x-ui/x-ui cert -webCert "$acme_ecc_dir/${domain}.cer" -webCertKey "$acme_ecc_dir/${domain}.key"
+            /usr/local/x-ui/x-ui setting -subCertFile "$acme_ecc_dir/${domain}.cer" -subKeyFile "$acme_ecc_dir/${domain}.key"
+            cert_file="$acme_ecc_dir/${domain}.cer"
+            key_file="$acme_ecc_dir/${domain}.key"
+            echo -e "${green}acme.sh ECC certificate used for x-ui.${plain}"
+            echo -e "${green}已直接使用acme.sh ECC证书文件配置x-ui${plain}"
             systemctl restart x-ui
         else
-            echo -e "${red}No valid certificate file found, please check acme.sh output and certificate path manually.${plain}"
-            echo -e "${red}未找到可用的证书文件，请手动检查acme.sh输出和证书路径${plain}"
-            exit 1
+            acme_rsa_dir="$HOME/.acme.sh/${domain}"
+            if [[ -f "$acme_rsa_dir/fullchain.cer" && -f "$acme_rsa_dir/${domain}.key" ]]; then
+                /usr/local/x-ui/x-ui cert -webCert "$acme_rsa_dir/fullchain.cer" -webCertKey "$acme_rsa_dir/${domain}.key"
+                /usr/local/x-ui/x-ui setting -subCertFile "$acme_rsa_dir/fullchain.cer" -subKeyFile "$acme_rsa_dir/${domain}.key"
+                cert_file="$acme_rsa_dir/fullchain.cer"
+                key_file="$acme_rsa_dir/${domain}.key"
+                echo -e "${green}acme.sh RSA certificate used for x-ui.${plain}"
+                echo -e "${green}已直接使用acme.sh RSA证书文件配置x-ui${plain}"
+                systemctl restart x-ui
+            else
+                echo -e "${red}No valid certificate file found, please check acme.sh output and certificate path manually.${plain}"
+                echo -e "${red}未找到可用的证书文件，请手动检查acme.sh输出和证书路径${plain}"
+                exit 1
+            fi
         fi
     fi
 
@@ -765,13 +820,10 @@ auto_ssl_and_nginx() {
         if [[ -n "$domain" && -n "$cert_file" ]]; then
             # 获取 webBasePath 和端口
             webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
+            webBasePath="${webBasePath#/}"
+            webBasePath="${webBasePath%/}"
             panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
-            # 默认协议 https
             protocol="https"
-            # 如果端口为80则用http
-            #//if [[ "$panel_port" == "80" ]]; then
-            #//    protocol="http"
-            #//fi
             if [[ -n "$webBasePath" && -n "$panel_port" ]]; then
                 echo -e "${green}Domain login link: ${protocol}://${domain}:${panel_port}/${webBasePath}${plain}"
                 echo -e "${green}域名登录链接：${protocol}://${domain}:${panel_port}/${webBasePath}${plain}"
