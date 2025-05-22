@@ -650,6 +650,7 @@ auto_ssl_and_nginx() {
         cert_file="$acme_ecc_dir/${domain}.cer"
         key_file="$acme_ecc_dir/${domain}.key"
         echo -e "${green}已直接使用acme.sh ECC证书文件配置x-ui${plain}"
+        systemctl restart x-ui
     else
         acme_rsa_dir="$HOME/.acme.sh/${domain}"
         if [[ -f "$acme_rsa_dir/fullchain.cer" && -f "$acme_rsa_dir/${domain}.key" ]]; then
@@ -658,6 +659,7 @@ auto_ssl_and_nginx() {
             cert_file="$acme_rsa_dir/fullchain.cer"
             key_file="$acme_rsa_dir/${domain}.key"
             echo -e "${green}已直接使用acme.sh RSA证书文件配置x-ui${plain}"
+            systemctl restart x-ui
         else
             echo -e "${red}未找到可用的证书文件，请手动检查acme.sh输出和证书路径${plain}"
             exit 1
@@ -676,6 +678,21 @@ auto_ssl_and_nginx() {
     if [[ -f /tmp/xui_install_info ]]; then
         echo -e "\n${yellow}面板登录信息如下，请妥善保存：${plain}"
         cat /tmp/xui_install_info
+        # 新增：如果有域名和端口，输出域名登录链接
+        if [[ -n "$domain" && -n "$cert_file" ]]; then
+            # 获取 webBasePath 和端口
+            webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
+            panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
+            # 默认协议 https
+            protocol="https"
+            # 如果端口为80则用http
+            #//if [[ "$panel_port" == "80" ]]; then
+            #//    protocol="http"
+            #//fi
+            if [[ -n "$webBasePath" && -n "$panel_port" ]]; then
+                echo -e "${green}域名登录链接：${protocol}://${domain}:${panel_port}/${webBasePath}${plain}"
+            fi
+        fi
         rm -f /tmp/xui_install_info
     fi
 
