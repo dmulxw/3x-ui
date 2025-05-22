@@ -113,6 +113,7 @@
 "exportDatabase" = "Экспорт базы данных"
 "importDatabase" = "Импорт базы данных"
 "clientDownload" = "Скачать клиент"
+"qrScanDownload" = "Сканировать QR для скачивания клиента"
 
 [pages.inbounds]
 "title" = "Подключения"

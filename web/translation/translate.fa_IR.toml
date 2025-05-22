@@ -113,6 +113,7 @@
 "exportDatabase" = "پشتیبان‌گیری"
 "importDatabase" = "بازگرداندن"
 "clientDownload" = "دانلود کلاینت"
+"qrScanDownload" = "اسکن کد QR برای دانلود کلاینت"
 
 [pages.inbounds]
 "title" = "کاربران"

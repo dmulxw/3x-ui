@@ -113,6 +113,7 @@
 "exportDatabase" = "Cadangkan"
 "importDatabase" = "Pulihkan"
 "clientDownload" = "Unduh Klien"
+"qrScanDownload" = "Pindai QR untuk unduh klien"
 
 [pages.inbounds]
 "title" = "Masuk"

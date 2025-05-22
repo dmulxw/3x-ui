@@ -113,6 +113,7 @@
 "exportDatabase" = "Descargar Base de Datos"
 "importDatabase" = "Cargar Base de Datos"
 "clientDownload" = "Descarga del cliente"
+"qrScanDownload" = "Escanear QR para descargar cliente"
 
 [pages.inbounds]
 "title" = "Entradas"

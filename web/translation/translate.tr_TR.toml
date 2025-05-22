@@ -113,6 +113,7 @@
 "exportDatabase" = "Yedekle"
 "importDatabase" = "Geri Yükle"
 "clientDownload" = "İstemci İndir"
+"qrScanDownload" = "İstemciyi indirmek için QR kodunu tara"
 
 [pages.inbounds]
 "title" = "Gelenler"

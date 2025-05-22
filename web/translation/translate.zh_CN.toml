@@ -113,6 +113,7 @@
 "exportDatabase" = "备份"
 "importDatabase" = "恢复"
 "clientDownload" = "客户端下载"
+"qrScanDownload" = "扫码下载客户端"
 
 [pages.inbounds]
 "title" = "入站列表"

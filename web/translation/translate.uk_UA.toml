@@ -113,6 +113,7 @@
 "exportDatabase" = "Резервне копіювання"
 "importDatabase" = "Відновити"
 "clientDownload" = "Завантажити клієнт"
+"qrScanDownload" = "Скануйте QR для завантаження клієнта"
 
 [pages.inbounds]
 "title" = "Вхідні"

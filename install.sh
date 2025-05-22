@@ -388,6 +388,35 @@ install_x-ui() {
 │  ${blue}x-ui install${plain}      - Install                          │
 │  ${blue}x-ui uninstall${plain}    - Uninstall                        │
 └───────────────────────────────────────────────────────┘"
+
+    # 新增：无论首次还是二次安装，输出当前登录信息
+    echo -e "${yellow}Current x-ui login information:${plain}"
+    if command -v /usr/local/x-ui/x-ui >/dev/null 2>&1; then
+        info=$(/usr/local/x-ui/x-ui setting -show true)
+        username=$(echo "$info" | grep -Eo 'username: .+' | awk '{print $2}')
+        password=$(echo "$info" | grep -Eo 'password: .+' | awk '{print $2}')
+        port=$(echo "$info" | grep -Eo 'port: .+' | awk '{print $2}')
+        webBasePath=$(echo "$info" | grep -Eo 'webBasePath: .+' | awk '{print $2}')
+        server_ip=$(curl -s https://api.ipify.org)
+        # 新增：读取域名（如果有）
+        panel_domain=""
+        if [[ -f /tmp/xui_panel_domain ]]; then
+            panel_domain=$(cat /tmp/xui_panel_domain)
+        fi
+        echo "---------------------------------------------"
+        echo -e "${green}Username: ${username}${plain}"
+        echo -e "${green}Password: ${password}${plain}"
+        echo -e "${green}Port: ${port}${plain}"
+        echo -e "${green}WebBasePath: ${webBasePath}${plain}"
+        echo -e "${green}Access URL: http://${server_ip}:${port}/${webBasePath}${plain}"
+        # 新增：如果有域名，额外输出域名形式
+        if [[ -n "$panel_domain" ]]; then
+            echo -e "${green}Access URL: http://${panel_domain}:${port}/${webBasePath}${plain}"
+        fi
+        echo "---------------------------------------------"
+    else
+        echo -e "${red}x-ui binary not found, cannot show login info.${plain}"
+    fi
 }
 
 check_firewall_ports() {
@@ -444,7 +473,25 @@ install_acme() {
         echo "https://github.com/acmesh-official/acme.sh/wiki/Install-in-China"
         # 不终止，继续尝试后续步骤
     fi
-    # 检查 socat 是否存在，否则尝试用 busybox socat 或提示
+    # 检查 socat 是否存在，否则尝试自动安装
+    if ! command -v socat >/dev/null 2>&1; then
+        # 自动尝试安装 socat
+        echo -e "${yellow}socat not detected, trying to install socat automatically...${plain}"
+        if [[ "${release}" =~ ^(ubuntu|debian|armbian)$ ]]; then
+            apt-get update && apt-get install -y socat
+        elif [[ "${release}" =~ ^(centos|almalinux|rocky|ol)$ ]]; then
+            yum install -y socat
+        elif [[ "${release}" =~ ^(fedora|amzn)$ ]]; then
+            dnf install -y socat
+        elif [[ "${release}" =~ ^(arch|manjaro|parch)$ ]]; then
+            pacman -Sy --noconfirm socat
+        elif [[ "${release}" == "opensuse-tumbleweed" ]]; then
+            zypper install -y socat
+        else
+            apt-get install -y socat
+        fi
+    fi
+    # 再次检测 socat
     if ! command -v socat >/dev/null 2>&1; then
         if command -v busybox >/dev/null 2>&1 && busybox | grep -q socat; then
             alias socat='busybox socat'

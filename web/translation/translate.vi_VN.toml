@@ -113,6 +113,7 @@
 "exportDatabase" = "Tải về Cơ sở dữ liệu"
 "importDatabase" = "Tải lên Cơ sở dữ liệu"
 "clientDownload" = "Tải xuống ứng dụng khách"
+"qrScanDownload" = "Quét mã QR để tải ứng dụng khách"
 
 [pages.inbounds]
 "title" = "Điểm vào (Inbounds)"

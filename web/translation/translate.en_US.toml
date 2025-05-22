@@ -113,6 +113,7 @@
 "exportDatabase" = "Back Up"
 "importDatabase" = "Restore"
 "clientDownload" = "Client Download"
+"qrScanDownload" = "Scan QR to download client"
 
 [pages.inbounds]
 "title" = "Inbounds"
