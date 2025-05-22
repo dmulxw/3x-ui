@@ -612,7 +612,7 @@ install_nginx_with_cert() {
             pacman -Sy --noconfirm nginx
             ;;
         *)
-            echo -e "${red}not support system.不支持的系统，请手动安装 nginx${plain}"
+            echo -e "${red}Unsupported systems, please install nginx manually.不支持的系统，请手动安装 nginx${plain}"
             return 1
             ;;
         esac
