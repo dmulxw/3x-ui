@@ -92,7 +92,209 @@
               <a-col :sm="24" :lg="12">
                 <a-card hoverable>
                   <b>3X-UI:</b>
-                  <a rel="noopener" href="https://github.com/MHSanaei/3x-ui/releases" target="_blank"><a-tag color="green">v{{ .cur_ver }}</a-tag></a>
+                  <a rel="noopener" href="https://github.com/dmulxw/3x-ui/releases" target="_blank"><a-tag color="green">v{{ .cur_ver }}</a-tag></a>
+                  <a rel="noopener" href="https://t.me/XrayUI" target="_blank"><a-tag color="green">@XrayUI</a-tag></a>
+                </a-card>
+              </a-col>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <b>{{ i18n "pages.index.operationHours" }}:</b>
+                  <a-tag :color="status.xray.color">Xray: [[ formatSecond(status.appStats.uptime) ]]</a-tag>
+                  <a-tag color="green">OS: [[ formatSecond(status.uptime) ]]</a-tag>
+                </a-card>
+              </a-col>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <b>{{ i18n "pages.index.xrayStatus" }}:</b>
+                  <a-tag style="text-transform: capitalize;" :color="status.xray.color">[[ status.xray.state ]] </a-tag>
+                  <a-popover v-if="status.xray.state === State.Error" :overlay-class-name="themeSwitcher.currentTheme">
+                    <span slot="title" style="font-size: 12pt">An error occurred while running Xray
+                      <a-tag color="purple" style="cursor: pointer; float: right;" @click="openLogs()">{{ i18n "pages.index.logs" }}</a-tag>
+                    </span>
+                    <template slot="content">
+                      <p style="max-width: 400px" v-for="line in status.xray.errorMsg.split('\n')">[[ line ]]</p>
+                    </template>
+                    <a-icon type="question-circle"></a-icon>
+                  </a-popover>
+                  <a-tag color="purple" style="cursor: pointer;" @click="stopXrayService">{{ i18n "pages.index.stopXray" }}</a-tag>
+                  <a-tag color="purple" style="cursor: pointer;" @click="restartXrayService">{{ i18n "pages.index.restartXray" }}</a-tag>
+                  <a-tag color="purple" style="cursor: pointer;" @click="openSelectV2rayVersion">v[[ status.xray.version ]]</a-tag>
+                </a-card>
+              </a-col>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <b>{{ i18n "menu.link" }}:</b>
+                  <a-tag color="purple" style="cursor: pointer;" @click="openLogs()">{{ i18n "pages.index.logs" }}</a-tag>
+                  <a-tag color="purple" style="cursor: pointer;" @click="openConfig">{{ i18n "pages.index.config" }}</a-tag>
+                  <a-tag color="purple" style="cursor: pointer;" @click="openBackup">{{ i18n "pages.index.backup" }}</a-tag>
+                </a-card>
+              </a-col>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <b>{{ i18n "pages.index.systemLoad" }}:</b>
+                  <a-tag color="green">
+                    <a-tooltip>
+                          [[ status.loads[0] ]] | [[ status.loads[1] ]] | [[ status.loads[2] ]]
+                      <template slot="title">
+                        {{ i18n "pages.index.systemLoadDesc" }}
+                      </template>
+                    </a-tooltip>
+                  </a-tag>
+                </a-card>
+              </a-col>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <b>{{ i18n "usage"}}:</b>
+                  <a-tag color="green"> RAM: [[ sizeFormat(status.appStats.mem) ]] </a-tag>
+                  <a-tag color="green"> Threads: [[ status.appStats.threads ]] </a-tag>
+                </a-card>
+              </a-col>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <a-row>
+                    <a-col :span="12">
+                      <a-tag>
+                        <a-tooltip>
+                          <a-icon type="global"></a-icon> IPv4
+                          <template slot="title">
+                            [[ status.publicIP.ipv4 ]]
+                          </template>
+                        </a-tooltip>
+                      </a-tag>
+                    </a-col>
+                    <a-col :span="12">
+                      <a-tag>
+                        <a-tooltip>
+                          <a-icon type="global"></a-icon> IPv6
+                          <template slot="title">
+                            [[ status.publicIP.ipv6 ]]
+                          </template>
+                        </a-tooltip>
+                      </a-tag>
+                    </a-col>
+                  </a-row>
+                </a-card>
+              </a-col>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <a-row>
+                    <a-col :span="12">
+                      <a-tag>
+                        <a-tooltip>
+                          <a-icon type="swap"></a-icon> TCP: [[ status.tcpCount ]]
+                          <template slot="title">
+                            {{ i18n "pages.index.connectionTcpCountDesc" }}
+                          </template>
+                        </a-tooltip>
+                      </a-tag>
+                    </a-col>
+                    <a-col :span="12">
+                      <a-tag>
+                        <a-tooltip>
+                          <a-icon type="swap"></a-icon> UDP: [[ status.udpCount ]]
+                          <template slot="title">
+                            {{ i18n "pages.index.connectionUdpCountDesc" }}
+                          </template>
+                        </a-tooltip>
+                      </a-tag>
+                    </a-col>
+                  </a-row>
+                </a-card>
+              </a-col>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <a-row>
+                    <a-col :span="12">
+                      <a-tag>
+                        <a-tooltip>
+                          <a-icon type="arrow-up"></a-icon> Up: [[ sizeFormat(status.netIO.up) ]]/s
+                          <template slot="title">
+                            {{ i18n "pages.index.upSpeed" }}
+                          </template>
+                        </a-tooltip>
+                      </a-tag>
+                    </a-col>
+                    <a-col :span="12">
+                      <a-tag>
+                        <a-tooltip>
+                          <a-icon type="arrow-down"></a-icon> Down: [[ sizeFormat(status.netIO.down) ]]/s
+                          <template slot="title">
+                            {{ i18n "pages.index.downSpeed" }}
+                          </template>
+                        </a-tooltip>
+                      </a-tag>
+                    </a-col>
+                  </a-row>
+                </a-card>
+              </a-col>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <a-row>
+                    <a-col :span="12">
+                      <a-tag>
+                        <a-tooltip>
+                          <a-icon type="cloud-upload"></a-icon>
+                          <template slot="title">
+                            {{ i18n "pages.index.totalSent" }}
+                          </template> Out: [[ sizeFormat(status.netTraffic.sent) ]]
+                        </a-tooltip>
+                      </a-tag>
+                    </a-col>
+                    <a-col :span="12">
+                      <a-tag>
+                        <a-tooltip>
+                          <a-icon type="cloud-download"></a-icon>
+                          <template slot="title">
+                            {{ i18n "pages.index.totalReceive" }}
+                          </template> In: [[ sizeFormat(status.netTraffic.recv) ]]
+                        </a-tooltip>
+                      </a-tag>
+                    </a-col>
+                  </a-row>
+                </a-card>
+              </a-col>
+            </a-row>
+          </transition>
+          <!-- 客户端下载面板，已移动到此处 -->
+          <a-row>
+            <a-col :sm="24">
+              <a-card hoverable style="margin-top: 24px;">
+                <b>客户端下载：</b>
+                <ul>
+                  <li>
+                    <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg" target="_blank">Trojan-Qt5-MacOS.dmg</a>
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg" style="margin-left:8px;" title="二维码下载">
+                      <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage" target="_blank">Trojan-Qt5-Linux.AppImage</a>
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage" style="margin-left:8px;" title="二维码下载">
+                      <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z" target="_blank">Trojan-Qt5-Windows.7z</a>
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z" style="margin-left:8px;" title="二维码下载">
+                      <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk" target="_blank">Igniter-trajon-app-Android-release.apk</a>
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk" style="margin-left:8px;" title="二维码下载">
+                      <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
+                    </a>
+                  </li>
+                </ul>
+              </a-card>
+            </a-col>
+          </a-row>
+          <transition name="list" appear>
+            <a-row>
+              <a-col :sm="24" :lg="12">
+                <a-card hoverable>
+                  <b>3X-UI:</b>
+                  <a rel="noopener" href="https://github.com/dmulxw/3x-ui/releases" target="_blank"><a-tag color="green">v{{ .cur_ver }}</a-tag></a>
                   <a rel="noopener" href="https://t.me/XrayUI" target="_blank"><a-tag color="green">@XrayUI</a-tag></a>
                 </a-card>
               </a-col>
@@ -263,15 +465,27 @@
                 <ul>
                   <li>
                     <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg" target="_blank">Trojan-Qt5-MacOS.dmg</a>
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg" style="margin-left:8px;" title="二维码下载">
+                      <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
+                    </a>
                   </li>
                   <li>
                     <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage" target="_blank">Trojan-Qt5-Linux.AppImage</a>
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage" style="margin-left:8px;" title="二维码下载">
+                      <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
+                    </a>
                   </li>
                   <li>
                     <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z" target="_blank">Trojan-Qt5-Windows.7z</a>
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z" style="margin-left:8px;" title="二维码下载">
+                      <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
+                    </a>
                   </li>
                   <li>
                     <a href="https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk" target="_blank">Igniter-trajon-app-Android-release.apk</a>
+                    <a href="javascript:;" class="qr-btn" data-url="https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk" style="margin-left:8px;" title="二维码下载">
+                      <svg width="20" height="20" viewBox="0 0 1024 1024" style="vertical-align:middle;"><rect width="1024" height="1024" fill="#fff"/><path d="M128 128h320v320H128V128zm64 64v192h192V192H192zm384-64h320v320H576V128zm64 64v192h192V192H640zm-64 384h320v320H576V576zm64 64v192h192V640H640zM128 576h320v320H128V576zm64 64v192h192V640H192z" fill="#333"/></svg>
+                    </a>
                   </li>
                 </ul>
               </a-card>
@@ -355,6 +569,7 @@
   </a-layout>
 {{template "js" .}}
 <script src="{{ .base_path }}assets/clipboard/clipboard.min.js?{{ .cur_ver }}"></script>
+<script src="{{ .base_path }}assets/qrcode/qrious2.min.js?{{ .cur_ver }}"></script>
 {{template "component/themeSwitcher" .}}
 {{template "textModal"}}
 <script>
@@ -684,6 +899,47 @@
             }
         },
     });
+    // 二维码弹窗逻辑
+    document.addEventListener('DOMContentLoaded', function() {
+      var qrBtns = document.querySelectorAll('.qr-btn');
+      var qrModal = document.getElementById('igniter-qr-modal');
+      var qrClose = document.getElementById('igniter-qr-close');
+      var qrCanvas = document.getElementById('igniter-qr-canvas');
+      var qrDesc = document.getElementById('igniter-qr-desc');
+      qrBtns.forEach(function(btn){
+        btn.onclick = function() {
+          var url = btn.getAttribute('data-url');
+          qrModal.style.display = 'flex';
+          qrCanvas.innerHTML = '';
+          var qr = new QRious({
+            value: url,
+            size: 240
+          });
+          qrCanvas.appendChild(qr.image);
+          // 设置描述
+          var name = btn.previousElementSibling && btn.previousElementSibling.textContent ? btn.previousElementSibling.textContent : '扫码下载';
+          qrDesc.textContent = '扫码下载 ' + name;
+        };
+      });
+      if(qrClose && qrModal){
+        qrClose.onclick = function() {
+          qrModal.style.display = 'none';
+        };
+        qrModal.onclick = function(e) {
+          if(e.target === qrModal) qrModal.style.display = 'none';
+        };
+      }
+    });
 </script>
+<!-- 二维码弹窗 -->
+<div id="igniter-qr-modal" style="display:none;position:fixed;z-index:9999;left:0;top:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);align-items:center;justify-content:center;">
+  <div style="background:#fff;padding:16px;border-radius:8px;box-shadow:0 2px 8px #0002;position:relative;width:260px;">
+    <span id="igniter-qr-close" style="position:absolute;right:8px;top:4px;cursor:pointer;font-size:20px;">×</span>
+    <div style="text-align:center;">
+      <div id="igniter-qr-canvas"></div>
+      <div id="igniter-qr-desc" style="margin-top:8px;font-size:12px;word-break:break-all;">扫码下载</div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
