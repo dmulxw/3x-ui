@@ -811,113 +811,48 @@ auto_ssl_and_nginx() {
     # 安装并配置nginx，传递实际证书路径
     install_nginx_with_cert "$domain" "$cert_file" "$key_file"
 
-    # 新增：自动添加 Trojan 入站
+    # ******************自动添加 Trojan 入站（网页submit方式）******************
     if [[ -n "$cert_file" && -n "$key_file" ]]; then
         # 生成随机端口（10000-60000）、用户名、密码
         trojan_port=$(shuf -i 10000-60000 -n 1)
-        trojan_user=$(gen_random_string 8)
+        trojan_user=$(gen_random_string 12) # 不用邮箱格式
         trojan_pass=$(gen_random_string 16)
-        # 构造入站 JSON，ALPN为h3,h2,http/1.1
-        inbound_json=$(cat <<EOF
-{
-  "remark": "FirstTrojan",
-  "enable": true,
-  "listen": "",
-  "port": $trojan_port,
-  "protocol": "trojan",
-  "settings": {
-    "clients": [
-      {
-        "email": "$trojan_user",
-        "password": "$trojan_pass"
-      }
-    ]
-  },
-  "streamSettings": {
-    "network": "tcp",
-    "security": "tls",
-    "tlsSettings": {
-      "certificates": [
-        {
-          "certificateFile": "$cert_file",
-          "keyFile": "$key_file"
-        }
-      ],
-      "alpn": ["h3","h2","http/1.1"]
-    }
-  }
-}
-EOF
-)
-        # 添加入站并检测返回状态
-        add_output=$(/usr/local/x-ui/x-ui add-inbound -json "$inbound_json" 2>&1)
-        add_status=$?
-        if [[ $add_status -eq 0 ]]; then
-            echo -e "${green}Trojan 入站已自动添加，信息如下：${plain}"
-            echo "---------------------------------------------"
-            echo "Remark: FirstTrojan"
-            echo "Protocol: trojan"
-            echo "Port: $trojan_port"
-            echo "Username: $trojan_user"
-            echo "Password: $trojan_pass"
-            echo "TLS: enabled"
-            echo "Certificate: $cert_file"
-            echo "Key: $key_file"
-            echo "ALPN: h3,h2,http/1.1"
-            echo "---------------------------------------------"
-            # 生成 trojan:// 协议链接
-            trojan_domain="$domain"
-            trojan_remark="FirstTrojan"
-            trojan_remark_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('FirstTrojan'))" 2>/dev/null || echo "FirstTrojan")
-            trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
-            trojan_url="trojan://${trojan_pass}@${trojan_domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark_url}"
-        else
-            echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
-            echo "$add_output"
-        fi
-        systemctl restart x-ui
-    fi
+        # 组装 settings、streamSettings
+        # ******************通过网页API提交Trojan入站******************
+        # 获取面板登录信息
+        panel_user=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'username: .+' | awk '{print $2}')
+        panel_pass=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'password: .+' | awk '{print $2}')
+        webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
+        panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
+        webBasePath=$(echo "$webBasePath" | sed 's#^/*##;s#/*$##')
 
-    # 安装结束后统一输出登录信息。
-    if [[ -f /tmp/xui_install_info ]]; then
-        echo -e "\n${yellow}Panel login information below, please keep it safe:${plain}"
-        echo -e "${yellow}面板登录信息如下，请妥善保存：${plain}"
-        cat /tmp/xui_install_info
-        # 新增：如果有域名和端口，输出域名登录链接
-        if [[ -n "$domain" && -n "$cert_file" ]]; then
-            webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
-            # 去除前后斜杠，只保留中间内容
-            webBasePathClean=$(echo "$webBasePath" | sed 's#^/*##;s#/*$##')
-            panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
-            protocol="https"
-            if [[ -n "$webBasePathClean" && -n "$panel_port" ]]; then
-                echo -e "${green}Domain login link: ${protocol}://${domain}:${panel_port}/${webBasePathClean}${plain}"
-                echo -e "${green}域名登录链接：${protocol}://${domain}:${panel_port}/${webBasePathClean}${plain}"
-            fi
-        fi
-        rm -f /tmp/xui_install_info
-    fi
+        # 1. 登录获取 cookie
+        curl -s -c /tmp/xui_cookie.txt -d "username=${panel_user}&password=${panel_pass}" \
+          "http://127.0.0.1:${panel_port}/${webBasePath}/panel/login" >/dev/null
 
-    # 显示客户端下载地址
-    echo -e "${green}Client download links:${plain}"
-    echo -e "${green}客户端下载地址：${plain}"
-    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-MacOS.dmg"
-    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage"
-    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z"
-    echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk"
-    # 输出 trojan 协议链接
-    if [[ -n "$trojan_url" ]]; then
-        echo ""
-        echo -e "${green}Trojan 客户端导入链接如下：${plain}"
-        echo -e "${green}Trojan Client app import link：${plain}"
-        echo "$trojan_url"
-        echo ""
+        # 2. 通过 API 添加入站（json方式）
+        # 注意：如果后端没有实现 /api/inbounds 路由，需改为 /panel/inbound/add 并用表单方式
+        curl -s -b /tmp/xui_cookie.txt -X POST "http://127.0.0.1:${panel_port}/${webBasePath}/panel/inbound/add" \
+          -d "remark=defaultTrojan" \
+          -d "enable=true" \
+          -d "listen=" \
+          -d "port=${trojan_port}" \
+          -d "protocol=trojan" \
+          -d "settings={\"clients\":[{\"email\":\"${trojan_user}\",\"password\":\"${trojan_pass}\"}]}" \
+          -d "streamSettings={\"network\":\"tcp\",\"security\":\"tls\",\"tlsSettings\":{\"certificates\":[{\"certificateFile\":\"${cert_file}\",\"keyFile\":\"${key_file}\"}],\"alpn\":[\"h3\",\"h2\",\"http/1.1\"]}}" \
+          -d "sniffing={}" \
+          -d "allocate={}" \
+          >/tmp/xui_add_inbound_result
+
+        echo -e "${green}Trojan inbound has been added to x-ui (via web submit).${plain}"
+        echo -e "${green}已将 Trojan 入站通过网页提交方式添加到 x-ui.${plain}"
+        echo -e "${yellow}Port: $trojan_port${plain}"
+        echo -e "${yellow}User: $trojan_user${plain}"
+        echo -e "${yellow}Pass: $trojan_pass${plain}"
     fi
 }
-
+# ******************自动执行主流程入口******************
 echo -e "${green}Running...${plain}"
 install_base
 install_x-ui $1
-
-# 自动化SSL证书、nginx、默认站点、证书路径写入
 auto_ssl_and_nginx
