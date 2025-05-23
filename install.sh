@@ -811,6 +811,71 @@ auto_ssl_and_nginx() {
     # 安装并配置nginx，传递实际证书路径
     install_nginx_with_cert "$domain" "$cert_file" "$key_file"
 
+    # 新增：自动添加 Trojan 入站
+    if [[ -n "$cert_file" && -n "$key_file" ]]; then
+        # 生成随机端口（10000-60000）、用户名、密码
+        trojan_port=$(shuf -i 10000-60000 -n 1)
+        trojan_user=$(gen_random_string 8)
+        trojan_pass=$(gen_random_string 16)
+        # 构造入站 JSON，ALPN为h3,h2,http/1.1
+        inbound_json=$(cat <<EOF
+{
+  "remark": "FirstTrojan",
+  "enable": true,
+  "listen": "",
+  "port": $trojan_port,
+  "protocol": "trojan",
+  "settings": {
+    "clients": [
+      {
+        "email": "$trojan_user",
+        "password": "$trojan_pass"
+      }
+    ]
+  },
+  "streamSettings": {
+    "network": "tcp",
+    "security": "tls",
+    "tlsSettings": {
+      "certificates": [
+        {
+          "certificateFile": "$cert_file",
+          "keyFile": "$key_file"
+        }
+      ],
+      "alpn": ["h3","h2","http/1.1"]
+    }
+  }
+}
+EOF
+)
+        # 添加入站
+        /usr/local/x-ui/x-ui add-inbound -json "$inbound_json"
+        # 输出信息
+        echo -e "${green}Trojan 入站已自动添加，信息如下：${plain}"
+        echo "---------------------------------------------"
+        echo "Remark: FirstTrojan"
+        echo "Protocol: trojan"
+        echo "Port: $trojan_port"
+        echo "Username: $trojan_user"
+        echo "Password: $trojan_pass"
+        echo "TLS: enabled"
+        echo "Certificate: $cert_file"
+        echo "Key: $key_file"
+        echo "ALPN: h3,h2,http/1.1"
+        echo "---------------------------------------------"
+        # 生成 trojan:// 协议链接
+        # 获取域名
+        trojan_domain="$domain"
+        # 备注（URL编码）
+        trojan_remark="FirstTrojan"
+        trojan_remark_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('FirstTrojan'))" 2>/dev/null || echo "FirstTrojan")
+        # alpn参数
+        trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
+        # 拼接trojan链接
+        trojan_url="trojan://${trojan_pass}@${trojan_domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark_url}"
+    fi
+
     # 安装结束后统一输出登录信息
     if [[ -f /tmp/xui_install_info ]]; then
         echo -e "\n${yellow}Panel login information below, please keep it safe:${plain}"
@@ -839,6 +904,14 @@ auto_ssl_and_nginx() {
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Linux.AppImage"
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z"
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk"
+    # 输出 trojan 协议链接
+    if [[ -n "$trojan_url" ]]; then
+        echo ""
+        echo -e "${green}Trojan 客户端导入链接如下：${plain}"
+        echo -e "${green}Trojan Client app import link：${plain}"
+        echo "$trojan_url"
+        echo ""
+    fi
 }
 
 echo -e "${green}Running...${plain}"
