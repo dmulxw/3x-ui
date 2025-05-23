@@ -849,29 +849,33 @@ auto_ssl_and_nginx() {
 }
 EOF
 )
-        # 添加入站并重启服务确保生效
-        /usr/local/x-ui/x-ui add-inbound -json "$inbound_json"
+        # 添加入站并检测返回状态
+        add_output=$(/usr/local/x-ui/x-ui add-inbound -json "$inbound_json" 2>&1)
+        add_status=$?
+        if [[ $add_status -eq 0 ]]; then
+            echo -e "${green}Trojan 入站已自动添加，信息如下：${plain}"
+            echo "---------------------------------------------"
+            echo "Remark: FirstTrojan"
+            echo "Protocol: trojan"
+            echo "Port: $trojan_port"
+            echo "Username: $trojan_user"
+            echo "Password: $trojan_pass"
+            echo "TLS: enabled"
+            echo "Certificate: $cert_file"
+            echo "Key: $key_file"
+            echo "ALPN: h3,h2,http/1.1"
+            echo "---------------------------------------------"
+            # 生成 trojan:// 协议链接
+            trojan_domain="$domain"
+            trojan_remark="FirstTrojan"
+            trojan_remark_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('FirstTrojan'))" 2>/dev/null || echo "FirstTrojan")
+            trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
+            trojan_url="trojan://${trojan_pass}@${trojan_domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark_url}"
+        else
+            echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
+            echo "$add_output"
+        fi
         systemctl restart x-ui
-
-        # 输出信息
-        echo -e "${green}Trojan 入站已自动添加，信息如下：${plain}"
-        echo "---------------------------------------------"
-        echo "Remark: FirstTrojan"
-        echo "Protocol: trojan"
-        echo "Port: $trojan_port"
-        echo "Username: $trojan_user"
-        echo "Password: $trojan_pass"
-        echo "TLS: enabled"
-        echo "Certificate: $cert_file"
-        echo "Key: $key_file"
-        echo "ALPN: h3,h2,http/1.1"
-        echo "---------------------------------------------"
-        # 生成 trojan:// 协议链接
-        trojan_domain="$domain"
-        trojan_remark="FirstTrojan"
-        trojan_remark_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('FirstTrojan'))" 2>/dev/null || echo "FirstTrojan")
-        trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
-        trojan_url="trojan://${trojan_pass}@${trojan_domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark_url}"
     fi
 
     # 安装结束后统一输出登录信息
