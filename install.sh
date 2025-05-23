@@ -420,6 +420,7 @@ install_x-ui() {
 }
 
 check_firewall_ports() {
+    echo "Starting firewall check..."
     local need_open=0
     local close_cmds=""
     # 检查ufw是否安装并启用
@@ -452,6 +453,7 @@ check_firewall_ports() {
 }
 
 check_port_occupied() {
+    echo "Starting port occupation check..."
     for port in 80 443; do
         local pinfo
         pinfo=$(lsof -i :$port -sTCP:LISTEN 2>/dev/null | grep -v "COMMAND")
@@ -855,4 +857,10 @@ auto_ssl_and_nginx() {
 echo -e "${green}Running...${plain}"
 install_base
 install_x-ui $1
-auto_ssl_and_nginx
+
+read -p "Would you like to configure SSL and Nginx? (y/n): " configure_ssl_nginx
+if [[ "$configure_ssl_nginx" == "y" || "$configure_ssl_nginx" == "Y" ]]; then
+    auto_ssl_and_nginx
+else
+    echo -e "${yellow}Skipping SSL and Nginx configuration.${plain}"
+fi
