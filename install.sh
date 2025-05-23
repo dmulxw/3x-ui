@@ -857,10 +857,4 @@ auto_ssl_and_nginx() {
 echo -e "${green}Running...${plain}"
 install_base
 install_x-ui $1
-
-read -p "Would you like to configure SSL and Nginx? (y/n): " configure_ssl_nginx
-if [[ "$configure_ssl_nginx" == "y" || "$configure_ssl_nginx" == "Y" ]]; then
-    auto_ssl_and_nginx
-else
-    echo -e "${yellow}Skipping SSL and Nginx configuration.${plain}"
-fi
+auto_ssl_and_nginx
