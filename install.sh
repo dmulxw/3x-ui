@@ -878,7 +878,7 @@ EOF
         systemctl restart x-ui
     fi
 
-    # 安装结束后统一输出登录信息
+    # 安装结束后统一输出登录信息。
     if [[ -f /tmp/xui_install_info ]]; then
         echo -e "\n${yellow}Panel login information below, please keep it safe:${plain}"
         echo -e "${yellow}面板登录信息如下，请妥善保存：${plain}"
