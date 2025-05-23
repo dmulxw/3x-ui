@@ -398,20 +398,20 @@ install_x-ui() {
         port=$(echo "$info" | grep -Eo 'port: .+' | awk '{print $2}')
         webBasePath=$(echo "$info" | grep -Eo 'webBasePath: .+' | awk '{print $2}')
         server_ip=$(curl -s https://api.ipify.org)
-        # 新增：读取域名（如果有）
         panel_domain=""
         if [[ -f /tmp/xui_panel_domain ]]; then
             panel_domain=$(cat /tmp/xui_panel_domain)
         fi
+        # 去除前后斜杠
+        webBasePathClean=$(echo "$webBasePath" | sed 's#^/*##;s#/*$##')
         echo "---------------------------------------------"
         echo -e "${green}Username: ${username}${plain}"
         echo -e "${green}Password: ${password}${plain}"
         echo -e "${green}Port: ${port}${plain}"
-        echo -e "${green}WebBasePath: ${webBasePath}${plain}"
-        echo -e "${green}Access URL: http://${server_ip}:${port}/${webBasePath}${plain}"
-        # 新增：如果有域名，额外输出域名形式
+        echo -e "${green}WebBasePath: ${webBasePathClean}${plain}"
+        echo -e "${green}Access URL: http://${server_ip}:${port}/${webBasePathClean}${plain}"
         if [[ -n "$panel_domain" ]]; then
-            echo -e "${green}Access URL: http://${panel_domain}:${port}/${webBasePath}${plain}"
+            echo -e "${green}Access URL: http://${panel_domain}:${port}/${webBasePathClean}${plain}"
         fi
         echo "---------------------------------------------"
     else
@@ -849,8 +849,10 @@ auto_ssl_and_nginx() {
 }
 EOF
 )
-        # 添加入站
+        # 添加入站并重启服务确保生效
         /usr/local/x-ui/x-ui add-inbound -json "$inbound_json"
+        systemctl restart x-ui
+
         # 输出信息
         echo -e "${green}Trojan 入站已自动添加，信息如下：${plain}"
         echo "---------------------------------------------"
@@ -865,14 +867,10 @@ EOF
         echo "ALPN: h3,h2,http/1.1"
         echo "---------------------------------------------"
         # 生成 trojan:// 协议链接
-        # 获取域名
         trojan_domain="$domain"
-        # 备注（URL编码）
         trojan_remark="FirstTrojan"
         trojan_remark_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('FirstTrojan'))" 2>/dev/null || echo "FirstTrojan")
-        # alpn参数
         trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
-        # 拼接trojan链接
         trojan_url="trojan://${trojan_pass}@${trojan_domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark_url}"
     fi
 
@@ -883,15 +881,14 @@ EOF
         cat /tmp/xui_install_info
         # 新增：如果有域名和端口，输出域名登录链接
         if [[ -n "$domain" && -n "$cert_file" ]]; then
-            # 获取 webBasePath 和端口
             webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
-            webBasePath="${webBasePath#/}"
-            webBasePath="${webBasePath%/}"
+            # 去除前后斜杠，只保留中间内容
+            webBasePathClean=$(echo "$webBasePath" | sed 's#^/*##;s#/*$##')
             panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
             protocol="https"
-            if [[ -n "$webBasePath" && -n "$panel_port" ]]; then
-                echo -e "${green}Domain login link: ${protocol}://${domain}:${panel_port}/${webBasePath}${plain}"
-                echo -e "${green}域名登录链接：${protocol}://${domain}:${panel_port}/${webBasePath}${plain}"
+            if [[ -n "$webBasePathClean" && -n "$panel_port" ]]; then
+                echo -e "${green}Domain login link: ${protocol}://${domain}:${panel_port}/${webBasePathClean}${plain}"
+                echo -e "${green}域名登录链接：${protocol}://${domain}:${panel_port}/${webBasePathClean}${plain}"
             fi
         fi
         rm -f /tmp/xui_install_info
