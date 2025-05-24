@@ -12,8 +12,8 @@ import (
 
 	"x-ui/config"
 	"x-ui/database"
+	"x-ui/database/model"
 	"x-ui/logger"
-	"x-ui/model"
 	"x-ui/sub"
 	"x-ui/web"
 	"x-ui/web/global"
