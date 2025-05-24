@@ -408,20 +408,42 @@ func parseTrojanURL(trojanURL string) (*model.Inbound, error) {
 	}
 	settingsBytes, _ := json.Marshal(settings)
 	// 组装 StreamSettings
+	network := values.Get("type")
+	if network == "" {
+		network = "tcp"
+	}
+	security := values.Get("security")
+	if security == "" {
+		security = "tls"
+	}
+	alpnStr := values.Get("alpn")
+	alpn := []string{"h3", "h2", "http/1.1"}
+	if alpnStr != "" {
+		alpn = strings.Split(alpnStr, ",")
+	}
+	fingerprint := values.Get("fp")
+	if fingerprint == "" {
+		fingerprint = "chrome"
+	}
 	streamSettings := map[string]interface{}{
-		"network":  values.Get("type"),
-		"security": values.Get("security"),
+		"network":  network,
+		"security": security,
 		"tlsSettings": map[string]interface{}{
-			"alpn":        strings.Split(values.Get("alpn"), ","),
-			"fingerprint": values.Get("fp"),
+			"alpn":        alpn,
+			"fingerprint": fingerprint,
 		},
 	}
 	streamSettingsBytes, _ := json.Marshal(streamSettings)
 	// 转换端口
 	portInt := 443
 	fmt.Sscanf(port, "%d", &portInt)
+	// Listen 默认值
+	listen := domain
+	if listen == "" {
+		listen = "0.0.0.0"
+	}
 	return &model.Inbound{
-		Listen:         domain,
+		Listen:         listen,
 		Port:           portInt,
 		Protocol:       "trojan",
 		Settings:       string(settingsBytes),
@@ -532,6 +554,16 @@ func main() {
 				if err := json.Unmarshal([]byte(AddInboundJson), &inboundObj); err != nil {
 					fmt.Println("解析入站 JSON 失败:", err)
 					return
+				}
+				// 设置默认值
+				if inboundObj.Listen == "" {
+					inboundObj.Listen = "0.0.0.0"
+				}
+				if inboundObj.Protocol == "" {
+					inboundObj.Protocol = "trojan"
+				}
+				if inboundObj.Tag == "" {
+					inboundObj.Tag = fmt.Sprintf("inbound-%v", inboundObj.Port)
 				}
 				inbound = &inboundObj
 			}

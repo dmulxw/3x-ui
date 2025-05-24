@@ -49,58 +49,30 @@ trojan_user=$(gen_random_string 12)
 trojan_pass=$(gen_random_string 16)
 remark="Trojan_$(date +%y%m%d)$(gen_random_string 5)"
 
-# 组装 Settings 和 StreamSettings 字符串（先生成原始JSON，再转义）
-settings_json_raw=$(printf '{"clients":[{"password":"%s","email":"%s","enable":true}]}' "$trojan_pass" "$trojan_user")
-streamsettings_json_raw=$(printf '{"network":"tcp","security":"tls","tlsSettings":{"alpn":["h3","h2","http/1.1"],"fingerprint":"chrome","certificates":[{"certificateFile":"%s","keyFile":"%s"}]}}' "$cert_file" "$key_file")
+trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
+trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${remark}"
 
-settings_json=$(printf '%s' "$settings_json_raw" | jq -Rs .)
-streamsettings_json=$(printf '%s' "$streamsettings_json_raw" | jq -Rs .)
-
-# 组装完整 Inbound JSON
-inbound_json=$(cat <<EOF
-{
-  "Listen": "",
-  "Port": $trojan_port,
-  "Protocol": "trojan",
-  "Settings": $settings_json,
-  "StreamSettings": $streamsettings_json,
-  "Tag": "$remark",
-  "Enable": true,
-  "Remark": "$remark"
-}
-EOF
-)
-
-echo -e "${yellow}即将添加的 Trojan 入站 JSON 内容如下：${plain}"
-echo "$inbound_json"
+echo -e "${yellow}即将添加的 Trojan 入站链接如下：${plain}"
+echo "$trojan_url"
 echo -e "${yellow}正在添加 Trojan 入站...${plain}"
-add_output=$(/usr/local/x-ui/x-ui setting -AddInbound "$inbound_json" 2>&1)
+add_output=$(/usr/local/x-ui/x-ui setting -AddInbound "$trojan_url" 2>&1)
 add_status=$?
 if [[ $add_status -eq 0 ]]; then
     echo "$add_output"
-    # 检查 add_output 是否包含“添加入站成功”字样
-    if echo "$add_output" | grep -q "添加入站成功"; then
-        echo -e "${green}Trojan 入站已添加，信息如下：${plain}"
-        echo "---------------------------------------------"
-        echo "Remark: $remark"
-        echo "Protocol: trojan"
-        echo "Port: $trojan_port"
-        echo "Username: $trojan_user"
-        echo "Password: $trojan_pass"
-        echo "TLS: enabled"
-        echo "Certificate: $cert_file"
-        echo "Key: $key_file"
-        echo "ALPN: h3,h2,http/1.1"
-        echo "---------------------------------------------"
-        trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
-        trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${remark}"
-        echo -e "${green}Trojan 客户端导入链接如下：${plain}"
-        echo "$trojan_url"
-    else
-        echo -e "${red}Trojan 入站添加命令执行成功，但未检测到数据库写入成功提示。请检查 x-ui 日志或面板。${plain}"
-        echo -e "${yellow}x-ui 返回内容如下：${plain}"
-        echo "$add_output"
-    fi
+    echo -e "${green}Trojan 入站已添加，信息如下：${plain}"
+    echo "---------------------------------------------"
+    echo "Remark: $remark"
+    echo "Protocol: trojan"
+    echo "Port: $trojan_port"
+    echo "Username: $trojan_user"
+    echo "Password: $trojan_pass"
+    echo "TLS: enabled"
+    echo "Certificate: $cert_file"
+    echo "Key: $key_file"
+    echo "ALPN: h3,h2,http/1.1"
+    echo "---------------------------------------------"
+    echo -e "${green}Trojan 客户端导入链接如下：${plain}"
+    echo "$trojan_url"
 else
     echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
     echo "$add_output"
