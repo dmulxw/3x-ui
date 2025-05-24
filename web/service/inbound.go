@@ -201,23 +201,24 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		}
 	}()
 
+	// 先保存数据库，并打印保存内容和结果
+	logger.Infof("准备保存入站数据到数据库: %+v", inbound)
 	err = tx.Save(inbound).Error
 	if err == nil {
+		logger.Infof("入站数据保存成功，ID: %d, 端口: %d, 协议: %s", inbound.Id, inbound.Port, inbound.Protocol)
 		if len(inbound.ClientStats) == 0 {
 			for _, client := range clients {
 				s.AddClientStat(tx, inbound.Id, &client)
 			}
 		}
 	} else {
+		logger.Errorf("入站数据保存失败: %v, 数据: %+v", err, inbound)
 		return inbound, false, err
 	}
 
 	needRestart := false
-	if inbound.Enable {
-		// 判空保护
-		if p == nil {
-			return inbound, false, fmt.Errorf("xray process is nil, please check xray backend initialization")
-		}
+	// 只有数据库保存成功后，才进行 xray 热更新
+	if inbound.Enable && p != nil {
 		s.xrayApi.Init(p.GetAPIPort())
 		inboundJson, err1 := json.MarshalIndent(inbound.GenXrayInboundConfig(), "", "  ")
 		if err1 != nil {
@@ -233,7 +234,7 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		}
 		s.xrayApi.Close()
 	}
-
+	// 如果 p == nil，直接返回数据库写入结果，不报错
 	return inbound, needRestart, err
 }
 
