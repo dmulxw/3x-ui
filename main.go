@@ -533,9 +533,16 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-		// 新增：如果 AddInboundJson 为空，自动添加一条默认 Trojan 入站
+		// 修正：初始化数据库和服务对象
 		if AddInboundJson == "" && len(os.Args) > 2 && os.Args[2] == "-AddInbound" {
 			fmt.Println("未检测到参数，自动添加默认 Trojan 入站")
+			err := database.InitDB(config.GetDBPath())
+			if err != nil {
+				fmt.Println("数据库初始化失败:", err)
+				return
+			}
+			// 必须用非指针方式初始化 InboundService，确保其方法里 database.GetDB() 可用
+			inboundService := service.InboundService{}
 			// 构造默认 Trojan 入站
 			password := "defaultTrojanPass"
 			domain := "0.0.0.0"
@@ -571,7 +578,6 @@ func main() {
 				Enable:         true,
 				Remark:         remark,
 			}
-			inboundService := service.InboundService{}
 			result, needRestart, err := inboundService.AddInbound(inbound)
 			if err != nil {
 				fmt.Println("添加默认 Trojan 入站失败:", err)

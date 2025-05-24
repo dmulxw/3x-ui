@@ -62,7 +62,8 @@ trojan_network="${network_default}"
 trojan_security="${security_default}"
 trojan_fp="${fp_default}"
 
-trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&alpn=${trojan_alpn}#${remark}"
+trojan_url=""
+#"trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&alpn=${trojan_alpn}#${remark}"
 
 echo -e "${yellow}即将添加的 Trojan 入站链接如下：${plain}"
 echo "$trojan_url"
