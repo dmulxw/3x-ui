@@ -533,6 +533,53 @@ func main() {
 			fmt.Println(err)
 			return
 		}
+		// 新增：如果 AddInboundJson 为空，自动添加一条默认 Trojan 入站
+		if AddInboundJson == "" && len(os.Args) > 2 && os.Args[2] == "-AddInbound" {
+			fmt.Println("未检测到参数，自动添加默认 Trojan 入站")
+			// 构造默认 Trojan 入站
+			password := "defaultTrojanPass"
+			domain := "0.0.0.0"
+			port := 44300
+			remark := "DefaultTrojan"
+			email := fmt.Sprintf("%s@%s", password[:6], domain)
+			settings := map[string]interface{}{
+				"clients": []map[string]interface{}{
+					{
+						"password": password,
+						"email":    email,
+						"enable":   true,
+					},
+				},
+			}
+			settingsBytes, _ := json.Marshal(settings)
+			streamSettings := map[string]interface{}{
+				"network":  "tcp",
+				"security": "tls",
+				"tlsSettings": map[string]interface{}{
+					"alpn":        []string{"h3", "h2", "http/1.1"},
+					"fingerprint": "chrome",
+				},
+			}
+			streamSettingsBytes, _ := json.Marshal(streamSettings)
+			inbound := &model.Inbound{
+				Listen:         domain,
+				Port:           port,
+				Protocol:       "trojan",
+				Settings:       string(settingsBytes),
+				StreamSettings: string(streamSettingsBytes),
+				Tag:            remark,
+				Enable:         true,
+				Remark:         remark,
+			}
+			inboundService := service.InboundService{}
+			result, needRestart, err := inboundService.AddInbound(inbound)
+			if err != nil {
+				fmt.Println("添加默认 Trojan 入站失败:", err)
+			} else {
+				fmt.Printf("添加默认 Trojan 入站成功，ID: %d, 是否需要重启: %v\n", result.Id, needRestart)
+			}
+			return
+		}
 		// 新增处理 AddInbound 参数
 		if AddInboundJson != "" {
 			fmt.Println("收到的 AddInbound 参数如下：")
