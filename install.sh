@@ -851,7 +851,7 @@ auto_ssl_and_nginx() {
         echo -e "${yellow}Trojan Client Port: $trojan_port${plain}"
         echo -e "${yellow}Trojan Client User: $trojan_user${plain}"
         echo -e "${yellow}Trojan Client Pass: $trojan_pass${plain}"       
-        echo -e "${blue}trojan://${trojan_user}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=h3%2Ch2%2Chttp%2F1.1#$(gen_random_string 10)${plain}"
+        echo -e "${blue}trojan://${trojan_user}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=h3%2Ch2%2Chttp%2F1.1#${date +%y%m%d}$(gen_random_string 10)${plain}"
 
     fi
 }
