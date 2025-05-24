@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"x-ui/config"
 	"x-ui/database"
 	"x-ui/logger"
+	"x-ui/model"
 	"x-ui/sub"
 	"x-ui/web"
 	"x-ui/web/global"
@@ -401,6 +403,7 @@ func main() {
 	var show bool
 	var getCert bool
 	var remove_secret bool
+	var AddInboundJson string
 	settingCmd.BoolVar(&reset, "reset", false, "Reset all settings")
 	settingCmd.BoolVar(&show, "show", false, "Display current settings")
 	settingCmd.BoolVar(&remove_secret, "remove_secret", false, "Remove secret key")
@@ -417,6 +420,7 @@ func main() {
 	settingCmd.StringVar(&tgbotRuntime, "tgbotRuntime", "", "Set cron time for Telegram bot notifications")
 	settingCmd.StringVar(&tgbotchatid, "tgbotchatid", "", "Set chat ID for Telegram bot notifications")
 	settingCmd.BoolVar(&enabletgbot, "enabletgbot", false, "Enable notifications via Telegram bot")
+	settingCmd.StringVar(&AddInboundJson, "AddInbound", "", "Add inbound by JSON string")
 
 	oldUsage := flag.Usage
 	flag.Usage = func() {
@@ -448,6 +452,27 @@ func main() {
 		err := settingCmd.Parse(os.Args[2:])
 		if err != nil {
 			fmt.Println(err)
+			return
+		}
+		// 新增处理 AddInbound 参数
+		if AddInboundJson != "" {
+			err := database.InitDB(config.GetDBPath())
+			if err != nil {
+				fmt.Println("数据库初始化失败:", err)
+				return
+			}
+			var inbound model.Inbound
+			if err := json.Unmarshal([]byte(AddInboundJson), &inbound); err != nil {
+				fmt.Println("解析入站 JSON 失败:", err)
+				return
+			}
+			inboundService := service.InboundService{}
+			result, needRestart, err := inboundService.AddInbound(&inbound)
+			if err != nil {
+				fmt.Println("添加入站失败:", err)
+			} else {
+				fmt.Printf("添加入站成功，ID: %d, 是否需要重启: %v\n", result.Id, needRestart)
+			}
 			return
 		}
 		if reset {
