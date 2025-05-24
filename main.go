@@ -555,15 +555,18 @@ func main() {
 					fmt.Println("解析入站 JSON 失败:", err)
 					return
 				}
-				// 设置默认值
+				// 设置默认值（参考控制器逻辑）
 				if inboundObj.Listen == "" {
 					inboundObj.Listen = "0.0.0.0"
 				}
 				if inboundObj.Protocol == "" {
 					inboundObj.Protocol = "trojan"
 				}
-				if inboundObj.Tag == "" {
+				// Tag 规则与控制器保持一致
+				if inboundObj.Listen == "" || inboundObj.Listen == "0.0.0.0" || inboundObj.Listen == "::" || inboundObj.Listen == "::0" {
 					inboundObj.Tag = fmt.Sprintf("inbound-%v", inboundObj.Port)
+				} else {
+					inboundObj.Tag = fmt.Sprintf("inbound-%v:%v", inboundObj.Listen, inboundObj.Port)
 				}
 				inbound = &inboundObj
 			}

@@ -49,8 +49,20 @@ trojan_user=$(gen_random_string 12)
 trojan_pass=$(gen_random_string 16)
 remark="Trojan_$(date +%y%m%d)$(gen_random_string 5)"
 
-trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
-trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${remark}"
+# 默认值（与后端一致）
+listen="0.0.0.0"
+protocol="trojan"
+alpn_default="h3%2Ch2%2Chttp%2F1.1"
+network_default="tcp"
+security_default="tls"
+fp_default="chrome"
+
+trojan_alpn="${alpn_default}"
+trojan_network="${network_default}"
+trojan_security="${security_default}"
+trojan_fp="${fp_default}"
+
+trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&alpn=${trojan_alpn}#${remark}"
 
 echo -e "${yellow}即将添加的 Trojan 入站链接如下：${plain}"
 echo "$trojan_url"
@@ -62,7 +74,7 @@ if [[ $add_status -eq 0 ]]; then
     echo -e "${green}Trojan 入站已添加，信息如下：${plain}"
     echo "---------------------------------------------"
     echo "Remark: $remark"
-    echo "Protocol: trojan"
+    echo "Protocol: $protocol"
     echo "Port: $trojan_port"
     echo "Username: $trojan_user"
     echo "Password: $trojan_pass"

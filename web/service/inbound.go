@@ -214,6 +214,10 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 
 	needRestart := false
 	if inbound.Enable {
+		// 判空保护
+		if p == nil {
+			return inbound, false, fmt.Errorf("xray process is nil, please check xray backend initialization")
+		}
 		s.xrayApi.Init(p.GetAPIPort())
 		inboundJson, err1 := json.MarshalIndent(inbound.GenXrayInboundConfig(), "", "  ")
 		if err1 != nil {
