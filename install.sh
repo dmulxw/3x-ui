@@ -870,7 +870,7 @@ EOF
             trojan_remark="FirstTrojan"
             trojan_remark_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('FirstTrojan'))" 2>/dev/null || echo "FirstTrojan")
             trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
-            trojan_url="trojan://${trojan_pass}@${trojan_domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark_url}"
+            trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark_url}"
         else
             echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
             echo "$add_output"

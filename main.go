@@ -5,8 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
+	"strings"
 	"syscall"
 	_ "unsafe"
 
@@ -375,6 +378,60 @@ func removeSecret() {
 	fmt.Println("Secret removed successfully.")
 }
 
+func parseTrojanURL(trojanURL string) (*model.Inbound, error) {
+	// 例: trojan://password@domain:port?type=tcp&security=tls&fp=chrome&alpn=h3%2Ch2%2Chttp%2F1.1#Remark
+	re := regexp.MustCompile(`^trojan://([^@]+)@([^:/?#]+):(\d+)\?([^#]*)#?(.*)$`)
+	matches := re.FindStringSubmatch(trojanURL)
+	if len(matches) < 6 {
+		return nil, fmt.Errorf("无效的 Trojan URL 格式")
+	}
+	password := matches[1]
+	domain := matches[2]
+	port := matches[3]
+	rawQuery := matches[4]
+	remark := matches[5]
+	if remark == "" {
+		remark = "Trojan"
+	}
+	// 解析 query
+	values, _ := url.ParseQuery(rawQuery)
+	// 组装 Settings
+	email := fmt.Sprintf("%s@%s", password[:6], domain)
+	settings := map[string]interface{}{
+		"clients": []map[string]interface{}{
+			{
+				"password": password,
+				"email":    email,
+				"enable":   true,
+			},
+		},
+	}
+	settingsBytes, _ := json.Marshal(settings)
+	// 组装 StreamSettings
+	streamSettings := map[string]interface{}{
+		"network":  values.Get("type"),
+		"security": values.Get("security"),
+		"tlsSettings": map[string]interface{}{
+			"alpn":        strings.Split(values.Get("alpn"), ","),
+			"fingerprint": values.Get("fp"),
+		},
+	}
+	streamSettingsBytes, _ := json.Marshal(streamSettings)
+	// 转换端口
+	portInt := 443
+	fmt.Sscanf(port, "%d", &portInt)
+	return &model.Inbound{
+		Listen:         domain,
+		Port:           portInt,
+		Protocol:       "trojan",
+		Settings:       string(settingsBytes),
+		StreamSettings: string(streamSettingsBytes),
+		Tag:            remark,
+		Enable:         true,
+		Remark:         remark,
+	}, nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		runWebServer()
@@ -456,22 +513,35 @@ func main() {
 		}
 		// 新增处理 AddInbound 参数
 		if AddInboundJson != "" {
+			fmt.Println("收到的 AddInbound 参数如下：")
+			fmt.Println(AddInboundJson)
 			err := database.InitDB(config.GetDBPath())
 			if err != nil {
 				fmt.Println("数据库初始化失败:", err)
 				return
 			}
-			var inbound model.Inbound
-			if err := json.Unmarshal([]byte(AddInboundJson), &inbound); err != nil {
-				fmt.Println("解析入站 JSON 失败:", err)
-				return
+			var inbound *model.Inbound
+			if strings.HasPrefix(AddInboundJson, "trojan://") {
+				inbound, err = parseTrojanURL(AddInboundJson)
+				if err != nil {
+					fmt.Println("解析 Trojan URL 失败:", err)
+					return
+				}
+			} else {
+				var inboundObj model.Inbound
+				if err := json.Unmarshal([]byte(AddInboundJson), &inboundObj); err != nil {
+					fmt.Println("解析入站 JSON 失败:", err)
+					return
+				}
+				inbound = &inboundObj
 			}
 			inboundService := service.InboundService{}
-			result, needRestart, err := inboundService.AddInbound(&inbound)
+			result, needRestart, err := inboundService.AddInbound(inbound)
 			if err != nil {
 				fmt.Println("添加入站失败:", err)
 			} else {
 				fmt.Printf("添加入站成功，ID: %d, 是否需要重启: %v\n", result.Id, needRestart)
+				fmt.Println("请刷新页面查看新入站，若未显示可尝试重启 x-ui 服务。")
 			}
 			return
 		}

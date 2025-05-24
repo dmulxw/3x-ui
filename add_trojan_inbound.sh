@@ -37,102 +37,98 @@ if [ -z "$panel_user" ] || [ -z "$panel_pass" ] || [ -z "$panel_port" ]; then
     exit 1
 fi
 
-# Get SSL certificate and key file paths from Nginx config
+# 获取证书路径
 nginx_config_file="/etc/nginx/conf.d/default_site.conf"
-
-if [ ! -f "$nginx_config_file" ]; then
-    echo -e "${red}Error: Nginx config file not found: $nginx_config_file${plain}"
-    exit 1
-fi
-
 cert_file=$(sed -n 's/^\s*ssl_certificate\s*\(.*\);/\1/p' "$nginx_config_file" | head -n1)
 key_file=$(sed -n 's/^\s*ssl_certificate_key\s*\(.*\);/\1/p' "$nginx_config_file" | head -n1)
 
-echo "Debug: cert_file = $cert_file"
-echo "Debug: key_file = $key_file"
-
-if [ -z "$cert_file" ] || [ -z "$key_file" ]; then
-    echo -e "${red}Error: Could not retrieve SSL certificate and key file paths from Nginx config. Please ensure SSL is configured in Nginx.${plain}"
-    #exit 1
-fi
-
-# Check if cert and key files exist
-if [ ! -f "$cert_file" ]; then
-    echo -e "${red}Error: Certificate file not found: $cert_file${plain}"
-    #exit 1
-fi
-if [ ! -f "$key_file" ]; then
-    echo -e "${red}Error: Key file not found: $key_file${plain}"
-    #exit 1
-fi
-
-# Use domain from command line argument or default to localhost
+# 生成参数
 domain=${1:-"127.0.0.1"}
-
-# Generate random port, user, password
 trojan_port=$(shuf -i 10000-60000 -n 1)
 trojan_user=$(gen_random_string 12)
 trojan_pass=$(gen_random_string 16)
 remark="Trojan_$(date +%y%m%d)$(gen_random_string 5)"
 
-echo -e "${yellow}Adding Trojan inbound with port ${trojan_port}, user ${trojan_user}, remark ${remark}...${plain}"
-login_url="https://${domain}:${panel_port}/${webBasePath}/panel/login"
-add_inbound_url="https://${domain}:${panel_port}/${webBasePath}/panel/inbound/add"
-echo "Debug: login_url = $login_url"
-echo "Debug: add_inbound_url = $add_inbound_url"
+# 组装 Settings 和 StreamSettings 字符串（先生成原始JSON，再转义）
+settings_json_raw=$(printf '{"clients":[{"password":"%s","email":"%s","enable":true}]}' "$trojan_pass" "$trojan_user")
+streamsettings_json_raw=$(printf '{"network":"tcp","security":"tls","tlsSettings":{"alpn":["h3","h2","http/1.1"],"fingerprint":"chrome","certificates":[{"certificateFile":"%s","keyFile":"%s"}]}}' "$cert_file" "$key_file")
 
-# Login to get cookie
-login_http_code=$(curl -s -k -c /tmp/xui_cookie.txt -d "username=${panel_user}&password=${panel_pass}" \
-  "$login_url" -w "%{http_code}" 2>/dev/null)
-echo "Debug: Login HTTP status code: $login_http_code"
+settings_json=$(printf '%s' "$settings_json_raw" | jq -Rs .)
+streamsettings_json=$(printf '%s' "$streamsettings_json_raw" | jq -Rs .)
 
-# 支持安全令牌登录
-# 如果设置了安全令牌，可以用如下方式登录（假设令牌为 $login_secret）
-# login_secret="LajRlfEcGEgW4GpRtM1pjhJ2jUfWoRPAT9w"
-# login_http_code=$(curl -s -k -c /tmp/xui_cookie.txt -d "username=${panel_user}&password=${panel_pass}&loginSecret=${login_secret}" \
-#   "$login_url" -w "%{http_code}" 2>/dev/null)
+# 组装完整 Inbound JSON
+inbound_json=$(cat <<EOF
+{
+  "Listen": "",
+  "Port": $trojan_port,
+  "Protocol": "trojan",
+  "Settings": $settings_json,
+  "StreamSettings": $streamsettings_json,
+  "Tag": "$remark",
+  "Enable": true,
+  "Remark": "$remark"
+}
+EOF
+)
 
-# Check if cookie file was created and is not empty
-if [ ! -s "/tmp/xui_cookie.txt" ]; then
-    echo -e "${red}Error: Failed to obtain login cookie. Please check panel username, password, port, and webBasePath.${plain}"
-    exit 1
-fi
-
-# Add inbound via API
-add_inbound_http_code=$(curl -s -k -b /tmp/xui_cookie.txt -X POST "$add_inbound_url" \
-  -d "remark=${remark}" \
-  -d "enable=true" \
-  -d "listen=" \
-  -d "port=${trojan_port}" \
-  -d "protocol=trojan" \
-  -d "settings={\"clients\":[{\"id\":\"${trojan_user}\",\"password\":\"${trojan_pass}\"}],\"fallbacks\":[]}" \
-  -d "streamSettings={\"network\":\"tcp\",\"security\":\"tls\",\"tlsSettings\":{\"serverName\":\"${domain}\",\"certificates\":[{\"certificateFile\":\"${cert_file}\",\"keyFile\":\"${key_file}\"}]}}" \
-  -d "sniffing={}" \
-  -d "allocate={}" \
-  -w "%{http_code}" >/tmp/xui_add_inbound_result 2>/dev/null)
-echo "Debug: Add Inbound HTTP status code: $add_inbound_http_code"
-
-# Check if API response file was created and is not empty
-if [ ! -s "/tmp/xui_add_inbound_result" ]; then
-    echo -e "${red}Error: Empty API response. Please check API URL and panel status.${plain}"
-    exit 1
-fi
-
-echo "Debug: API response content:"
-cat /tmp/xui_add_inbound_result
-echo "Debug: End of API response content"
-
-# Check API call result based on HTTP status code
-if [ "$add_inbound_http_code" -eq 200 ]; then
-    echo -e "${green}Trojan inbound added successfully.${plain}"
-    echo -e "${green}Trojan Client URL:${plain}"
-    echo -e "${blue}trojan://${trojan_user}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=h3%2Ch2%2Chttp%2F1.1#${remark}${plain}"
+echo -e "${yellow}即将添加的 Trojan 入站 JSON 内容如下：${plain}"
+echo "$inbound_json"
+echo -e "${yellow}正在添加 Trojan 入站...${plain}"
+add_output=$(/usr/local/x-ui/x-ui setting -AddInbound "$inbound_json" 2>&1)
+add_status=$?
+if [[ $add_status -eq 0 ]]; then
+    echo "$add_output"
+    # 检查 add_output 是否包含“添加入站成功”字样
+    if echo "$add_output" | grep -q "添加入站成功"; then
+        echo -e "${green}Trojan 入站已添加，信息如下：${plain}"
+        echo "---------------------------------------------"
+        echo "Remark: $remark"
+        echo "Protocol: trojan"
+        echo "Port: $trojan_port"
+        echo "Username: $trojan_user"
+        echo "Password: $trojan_pass"
+        echo "TLS: enabled"
+        echo "Certificate: $cert_file"
+        echo "Key: $key_file"
+        echo "ALPN: h3,h2,http/1.1"
+        echo "---------------------------------------------"
+        trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
+        trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${remark}"
+        echo -e "${green}Trojan 客户端导入链接如下：${plain}"
+        echo "$trojan_url"
+    else
+        echo -e "${red}Trojan 入站添加命令执行成功，但未检测到数据库写入成功提示。请检查 x-ui 日志或面板。${plain}"
+        echo -e "${yellow}x-ui 返回内容如下：${plain}"
+        echo "$add_output"
+    fi
 else
-    echo -e "${red}Failed to add Trojan inbound. HTTP status code: $add_inbound_http_code${plain}"
-    echo -e "${red}API response:${plain}"
-    cat /tmp/xui_add_inbound_result
+    echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
+    echo "$add_output"
 fi
 
-# Clean up cookie and result files
-rm -f /tmp/xui_cookie.txt
-rm -f /tmp/xui_add_inbound_result
+# 只生成 Trojan inbound JSON 字符串并输出
+generate_trojan_inbound_json() {
+    local trojan_port=$(shuf -i 10000-60000 -n 1)
+    local trojan_user=$(gen_random_string 12)
+    local trojan_pass=$(gen_random_string 16)
+    local remark="Trojan_$(date +%y%m%d)$(gen_random_string 5)"
+    local cert_file="/path/to/your/cert.crt"
+    local key_file="/path/to/your/cert.key"
+    local settings_json=$(printf '{"clients":[{"password":"%s","email":"%s","enable":true}]}' "$trojan_pass" "$trojan_user")
+    local streamsettings_json=$(printf '{"network":"tcp","security":"tls","tlsSettings":{"alpn":["h3","h2","http/1.1"],"fingerprint":"chrome","certificates":[{"certificateFile":"%s","keyFile":"%s"}]}}' "$cert_file" "$key_file")
+    cat <<EOF
+{
+  "Listen": "",
+  "Port": $trojan_port,
+  "Protocol": "trojan",
+  "Settings": "$settings_json",
+  "StreamSettings": "$streamsettings_json",
+  "Tag": "$remark",
+  "Enable": true,
+  "Remark": "$remark"
+}
+EOF
+}
+
+# 调用示例
+generate_trojan_inbound_json
