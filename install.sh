@@ -846,11 +846,13 @@ auto_ssl_and_nginx() {
           -d "allocate={}" \
           >/tmp/xui_add_inbound_result
 
-        echo -e "${green}Trojan inbound has been added to x-ui (via web submit).${plain}"
-        echo -e "${green}已将 Trojan 入站通过网页提交方式添加到 x-ui.${plain}"
-        echo -e "${yellow}Port: $trojan_port${plain}"
-        echo -e "${yellow}User: $trojan_user${plain}"
-        echo -e "${yellow}Pass: $trojan_pass${plain}"
+        echo -e "${green}Trojan Client APP link for import.${plain}"
+        echo -e "${green}已将 Trojan APP 客户端导入链接.${plain}"
+        echo -e "${yellow}Trojan Client Port: $trojan_port${plain}"
+        echo -e "${yellow}Trojan Client User: $trojan_user${plain}"
+        echo -e "${yellow}Trojan Client Pass: $trojan_pass${plain}"       
+        echo -e "${blue}trojan://${trojan_user}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=h3%2Ch2%2Chttp%2F1.1#$(gen_random_string 10)${plain}"
+
     fi
 }
 # ******************自动执行主流程入口******************
