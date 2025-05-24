@@ -541,12 +541,15 @@ func main() {
 				fmt.Println("数据库初始化失败:", err)
 				return
 			}
-			// 必须用非指针方式初始化 InboundService，确保其方法里 database.GetDB() 可用
 			inboundService := service.InboundService{}
-			// 构造默认 Trojan 入站
+			// 随机端口，范围10000-60000
+			port := 10000 + (int(uint32(os.Getpid())+uint32(os.Getppid())+uint32(os.Getuid())+uint32(os.Getgid())+uint32(os.Geteuid())+uint32(os.Getegid())+uint32(os.Getppid())) % 50000)
+			// 更保险：用crypto/rand生成
+			// import "crypto/rand", "math/big"
+			// randPort, _ := rand.Int(rand.Reader, big.NewInt(50000))
+			// port := 10000 + int(randPort.Int64())
 			password := "defaultTrojanPass"
 			domain := "0.0.0.0"
-			port := 44300
 			remark := "DefaultTrojan"
 			email := fmt.Sprintf("%s@%s", password[:6], domain)
 			settings := map[string]interface{}{
@@ -582,7 +585,15 @@ func main() {
 			if err != nil {
 				fmt.Println("添加默认 Trojan 入站失败:", err)
 			} else {
-				fmt.Printf("添加默认 Trojan 入站成功，ID: %d, 是否需要重启: %v\n", result.Id, needRestart)
+				fmt.Printf("添加默认 Trojan 入站成功，ID: %d, 端口: %d, 是否需要重启: %v\n", result.Id, result.Port, needRestart)
+			}
+			// 新增：打印所有已保存的 inbounds
+			allInbounds, err := inboundService.GetAllInbounds()
+			if err == nil {
+				fmt.Println("当前数据库已保存的所有入站：")
+				for _, ib := range allInbounds {
+					fmt.Printf("ID: %d, 协议: %s, 端口: %d, 备注: %s, 启用: %v\n", ib.Id, ib.Protocol, ib.Port, ib.Remark, ib.Enable)
+				}
 			}
 			return
 		}
