@@ -448,11 +448,12 @@ func parseTrojanURL(trojanURL string) (*model.Inbound, error) {
 	// 转换端口
 	portInt := 443
 	fmt.Sscanf(port, "%d", &portInt)
-	// Listen 默认值
-	listen := domain
-	if listen == "" {
-		listen = "0.0.0.0"
-	}
+	// Listen 默认值,侦听所有端口
+	listen := ""
+	//domain
+	//if listen == "" {
+	//	listen = "0.0.0.0"
+	//}
 	return &model.Inbound{
 		Listen:         listen,
 		Port:           portInt,

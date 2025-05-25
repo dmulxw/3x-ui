@@ -811,37 +811,44 @@ auto_ssl_and_nginx() {
     # 安装并配置nginx，传递实际证书路径
     install_nginx_with_cert "$domain" "$cert_file" "$key_file"
 
-    # 新增：自动添加 Trojan 入站
+    # 新增：自动添加 Trojan 入站（完全复用 add_inbound.sh 逻辑）
+    trojan_url_client=""
     if [[ -n "$cert_file" && -n "$key_file" ]]; then
-        # 生成随机端口（10000-60000）、用户名、密码
+        # 生成参数 domain实际需要根据当前主机的域名
+        #domain="${domain:-doyousee.icu}"
         trojan_port=$(shuf -i 10000-60000 -n 1)
-        trojan_user=$(gen_random_string 8)
+        trojan_user=$(gen_random_string 12)
         trojan_pass=$(gen_random_string 16)
-        trojan_remark="defaultTrojan"
-        trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
-        # 构造 trojan:// 协议链接
-        trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark}"
-        # 直接传递 trojan:// 字符串给 x-ui
+        # remark 格式：Trojan_年月日时分秒+4位随机数字
+        remark="Trojan_$(date +%y%m%d%H%M%S)$(gen_random_string 4)"
+        listen=""
+        protocol="trojan"
+        alpn_default="h3%2Ch2%2Chttp%2F1.1"
+        network_default="tcp"
+        security_default="tls"
+        fp_default="chrome"
+        trojan_alpn="${alpn_default}"
+        trojan_network="${network_default}"
+        trojan_security="${security_default}"
+        trojan_fp="${fp_default}"
+        cerfile="$cert_file"
+        keyfile="$key_file"
+        trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&cerfile=${cerfile}&keyfile=${keyfile}&alpn=${trojan_alpn}#${remark}"
+
+        echo -e "${yellow}即将添加的 Trojan 入站链接如下：${plain}"
+        echo "$trojan_url"
+        #echo -e "${yellow}正在添加 Trojan 入站...${plain}"
         add_output=$(/usr/local/x-ui/x-ui setting -AddInbound "$trojan_url" 2>&1)
         add_status=$?
         if [[ $add_status -eq 0 ]]; then
-            echo -e "${green}Trojan 入站已自动添加，信息如下：${plain}"
+            echo "$add_output"
+            trojan_url_client="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&alpn=${trojan_alpn}#${remark}"
             echo "---------------------------------------------"
-            echo "Remark: $trojan_remark"
-            echo "Protocol: trojan"
-            echo "Port: $trojan_port"
-            echo "Username: $trojan_user"
-            echo "Password: $trojan_pass"
-            echo "TLS: enabled"
-            echo "Certificate: $cert_file"
-            echo "Key: $key_file"
-            echo "ALPN: h3,h2,http/1.1"
-            echo "---------------------------------------------"
-            echo -e "${green}Trojan 客户端导入链接如下：${plain}"
-            echo "$trojan_url"
+            
         else
             echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
             echo "$add_output"
+            echo "---------------------------------------------"
         fi
         systemctl restart x-ui
     fi
@@ -874,11 +881,11 @@ auto_ssl_and_nginx() {
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z"
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk"
     # 输出 trojan 协议链接
-    if [[ -n "$trojan_url" ]]; then
+    if [[ -n "$trojan_url_client" ]]; then
         echo ""
         echo -e "${green}Trojan 客户端导入链接如下：${plain}"
         echo -e "${green}Trojan Client app import link：${plain}"
-        echo "$trojan_url"
+        echo "$trojan_url_client"
         echo ""
     fi
 }

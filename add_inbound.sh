@@ -42,15 +42,16 @@ nginx_config_file="/etc/nginx/conf.d/default_site.conf"
 cert_file=$(sed -n 's/^\s*ssl_certificate\s*\(.*\);/\1/p' "$nginx_config_file" | head -n1)
 key_file=$(sed -n 's/^\s*ssl_certificate_key\s*\(.*\);/\1/p' "$nginx_config_file" | head -n1)
 
-# 生成参数
-domain=${1:-"127.0.0.1"}
+# 生成参数 domain实际需要根据当前主机的域名
+domain=${1:-"doyousee.icu"}
 trojan_port=$(shuf -i 10000-60000 -n 1)
 trojan_user=$(gen_random_string 12)
 trojan_pass=$(gen_random_string 16)
-remark="Trojan_$(date +%y%m%d)$(gen_random_string 5)"
+# 生成 remark，格式：Trojan_年月日时分秒+4位随机数字
+remark="Tro_$(date +%y%m%d%H%M%S)$(gen_random_string 4)"
 
 # 默认值（与后端一致）
-listen="0.0.0.0"
+listen=""
 protocol="trojan"
 alpn_default="h3%2Ch2%2Chttp%2F1.1"
 network_default="tcp"
@@ -68,8 +69,7 @@ keyfile="${3:-/root/.acme.sh/doyousee.icu_ecc/doyousee.icu.key}"
 
 trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&cerfile=${cerfile}&keyfile=${keyfile}&alpn=${trojan_alpn}#${remark}"
 
-echo -e "${yellow}即将添加的 Trojan 入站链接如下：${plain}"
-echo "$trojan_url"
+ 
 echo -e "${yellow}正在添加 Trojan 入站...${plain}"
 add_output=$(/usr/local/x-ui/x-ui setting -AddInbound "$trojan_url" 2>&1)
 add_status=$?
@@ -83,40 +83,15 @@ if [[ $add_status -eq 0 ]]; then
     echo "Username: $trojan_user"
     echo "Password: $trojan_pass"
     echo "TLS: enabled"
-    echo "Certificate: $cert_file"
-    echo "Key: $key_file"
     echo "ALPN: h3,h2,http/1.1"
     echo "---------------------------------------------"
-    echo -e "${green}Trojan 客户端导入链接如下：${plain}"
-    echo "$trojan_url"
+    echo "Trojan 客户端导入链接如下："
+    # 移除 cerfile 和 keyfile 参数，仅保留必要参数
+    trojan_url_client="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&alpn=${trojan_alpn}#${remark}"
+    echo "$trojan_url_client"
+  
 else
     echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
     echo "$add_output"
 fi
 
-# 只生成 Trojan inbound JSON 字符串并输出
-generate_trojan_inbound_json() {
-    local trojan_port=$(shuf -i 10000-60000 -n 1)
-    local trojan_user=$(gen_random_string 12)
-    local trojan_pass=$(gen_random_string 16)
-    local remark="Trojan_$(date +%y%m%d)$(gen_random_string 5)"
-    local cert_file="/path/to/your/cert.crt"
-    local key_file="/path/to/your/cert.key"
-    local settings_json=$(printf '{"clients":[{"password":"%s","email":"%s","enable":true}]}' "$trojan_pass" "$trojan_user")
-    local streamsettings_json=$(printf '{"network":"tcp","security":"tls","tlsSettings":{"alpn":["h3","h2","http/1.1"],"fingerprint":"chrome","certificates":[{"certificateFile":"%s","keyFile":"%s"}]}}' "$cert_file" "$key_file")
-    cat <<EOF
-{
-  "Listen": "",
-  "Port": $trojan_port,
-  "Protocol": "trojan",
-  "Settings": "$settings_json",
-  "StreamSettings": "$streamsettings_json",
-  "Tag": "$remark",
-  "Enable": true,
-  "Remark": "$remark"
-}
-EOF
-}
-
-# 调用示例
-generate_trojan_inbound_json
