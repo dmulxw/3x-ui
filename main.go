@@ -425,6 +425,8 @@ func parseTrojanURL(trojanURL string) (*model.Inbound, error) {
 	if fingerprint == "" {
 		fingerprint = "chrome"
 	}
+	cerfile := values.Get("cerfile")
+	keyfile := values.Get("keyfile")
 	streamSettings := map[string]interface{}{
 		"network":  network,
 		"security": security,
@@ -432,6 +434,15 @@ func parseTrojanURL(trojanURL string) (*model.Inbound, error) {
 			"alpn":        alpn,
 			"fingerprint": fingerprint,
 		},
+	}
+	// 支持cerfile和keyfile参数
+	if cerfile != "" && keyfile != "" {
+		streamSettings["tlsSettings"].(map[string]interface{})["certificates"] = []map[string]interface{}{
+			{
+				"certificateFile": cerfile,
+				"keyFile":         keyfile,
+			},
+		}
 	}
 	streamSettingsBytes, _ := json.Marshal(streamSettings)
 	// 转换端口
@@ -542,14 +553,27 @@ func main() {
 				return
 			}
 			inboundService := service.InboundService{}
+			// 获取系统第一个用户ID
+			userService := service.UserService{}
+			userModel, _ := userService.GetFirstUser()
+			userId := userModel.Id
+			// 支持从环境变量或命令行参数传入 domain/password/email
+			domain := os.Getenv("TROJAN_DOMAIN")
+			if domain == "" {
+				domain = "example.com" // 推荐用实际域名，避免0.0.0.0
+			}
+			password := os.Getenv("TROJAN_PASSWORD")
+			if password == "" {
+				// 随机生成16位密码
+				const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+				b := make([]byte, 16)
+				for i := range b {
+					b[i] = letters[int(uint32(os.Getpid())+uint32(os.Getppid())+uint32(os.Getuid())+uint32(os.Getgid())+uint32(os.Geteuid())+uint32(os.Getegid())+uint32(os.Getppid())+uint32(i))%len(letters)]
+				}
+				password = string(b)
+			}
 			// 随机端口，范围10000-60000
 			port := 10000 + (int(uint32(os.Getpid())+uint32(os.Getppid())+uint32(os.Getuid())+uint32(os.Getgid())+uint32(os.Geteuid())+uint32(os.Getegid())+uint32(os.Getppid())) % 50000)
-			// 更保险：用crypto/rand生成
-			// import "crypto/rand", "math/big"
-			// randPort, _ := rand.Int(rand.Reader, big.NewInt(50000))
-			// port := 10000 + int(randPort.Int64())
-			password := "defaultTrojanPass"
-			domain := "0.0.0.0"
 			remark := "DefaultTrojan"
 			email := fmt.Sprintf("%s@%s", password[:6], domain)
 			settings := map[string]interface{}{
@@ -572,7 +596,7 @@ func main() {
 			}
 			streamSettingsBytes, _ := json.Marshal(streamSettings)
 			inbound := &model.Inbound{
-				Listen:         domain,
+				Listen:         "0.0.0.0",
 				Port:           port,
 				Protocol:       "trojan",
 				Settings:       string(settingsBytes),
@@ -580,6 +604,7 @@ func main() {
 				Tag:            remark,
 				Enable:         true,
 				Remark:         remark,
+				UserId:         userId, // 关键：写入用户ID
 			}
 			result, needRestart, err := inboundService.AddInbound(inbound)
 			if err != nil {
@@ -587,13 +612,15 @@ func main() {
 			} else {
 				fmt.Printf("添加默认 Trojan 入站成功，ID: %d, 端口: %d, 是否需要重启: %v\n", result.Id, result.Port, needRestart)
 			}
-			// 新增：打印所有已保存的 inbounds
+			// 新增：打印所有已保存的 inbounds（详细信息，便于排查）
 			allInbounds, err := inboundService.GetAllInbounds()
 			if err == nil {
-				fmt.Println("当前数据库已保存的所有入站：")
+				fmt.Println("当前数据库已保存的所有入站（详细）：")
 				for _, ib := range allInbounds {
-					fmt.Printf("ID: %d, 协议: %s, 端口: %d, 备注: %s, 启用: %v\n", ib.Id, ib.Protocol, ib.Port, ib.Remark, ib.Enable)
+					fmt.Printf("ID: %d, 协议: %s, 端口: %d, 备注: %s, 启用: %v, Listen: %s, Tag: %s, Settings: %s\n", ib.Id, ib.Protocol, ib.Port, ib.Remark, ib.Enable, ib.Listen, ib.Tag, ib.Settings)
 				}
+			} else {
+				fmt.Println("读取数据库入站失败：", err)
 			}
 			return
 		}
@@ -608,6 +635,7 @@ func main() {
 			}
 			var inbound *model.Inbound
 			if strings.HasPrefix(AddInboundJson, "trojan://") {
+				fmt.Println("解析 Trojan 开头字符串")
 				inbound, err = parseTrojanURL(AddInboundJson)
 				if err != nil {
 					fmt.Println("解析 Trojan URL 失败:", err)
@@ -615,6 +643,7 @@ func main() {
 				}
 			} else {
 				var inboundObj model.Inbound
+				fmt.Println("解析 Trojan JSON字符串")
 				if err := json.Unmarshal([]byte(AddInboundJson), &inboundObj); err != nil {
 					fmt.Println("解析入站 JSON 失败:", err)
 					return
@@ -634,13 +663,27 @@ func main() {
 				}
 				inbound = &inboundObj
 			}
+			// 获取系统第一个用户ID
+			userService := service.UserService{}
+			userModel, _ := userService.GetFirstUser()
+			inbound.UserId = userModel.Id
 			inboundService := service.InboundService{}
 			result, needRestart, err := inboundService.AddInbound(inbound)
 			if err != nil {
-				fmt.Println("添加入站失败:", err)
+				fmt.Println("带参数添加入站失败:", err)
 			} else {
-				fmt.Printf("添加入站成功，ID: %d, 是否需要重启: %v\n", result.Id, needRestart)
+				fmt.Printf("带参数添加入站成功，ID: %d, 是否需要重启: %v\n", result.Id, needRestart)
 				fmt.Println("请刷新页面查看新入站，若未显示可尝试重启 x-ui 服务。")
+			}
+			// 新增：打印所有已保存的 inbounds（详细信息，便于排查）
+			allInbounds, err := inboundService.GetAllInbounds()
+			if err == nil {
+				fmt.Println("当前数据库已保存的所有入站（详细）：")
+				for _, ib := range allInbounds {
+					fmt.Printf("ID: %d, 协议: %s, 端口: %d, 备注: %s, 启用: %v, Listen: %s, Tag: %s, Settings: %s\n", ib.Id, ib.Protocol, ib.Port, ib.Remark, ib.Enable, ib.Listen, ib.Tag, ib.Settings)
+				}
+			} else {
+				fmt.Println("读取数据库入站失败：", err)
 			}
 			return
 		}
