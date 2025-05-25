@@ -820,7 +820,7 @@ auto_ssl_and_nginx() {
         trojan_user=$(gen_random_string 12)
         trojan_pass=$(gen_random_string 16)
         # remark 格式：Trojan_年月日时分秒+4位随机数字
-        remark="Trojan_$(date +%y%m%d%H%M%S)$(gen_random_string 4)"
+        remark="Tr_$(date +%y%m%d%H%M%S)$(gen_random_string 2)"
         listen=""
         protocol="trojan"
         alpn_default="h3%2Ch2%2Chttp%2F1.1"
@@ -885,7 +885,7 @@ auto_ssl_and_nginx() {
         echo ""
         echo -e "${green}Trojan 客户端导入链接如下：${plain}"
         echo -e "${green}Trojan Client app import link：${plain}"
-        echo "$trojan_url_client"
+        echo "${green}$trojan_url_client"
         echo ""
     fi
 }

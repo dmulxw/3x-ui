@@ -48,7 +48,7 @@ trojan_port=$(shuf -i 10000-60000 -n 1)
 trojan_user=$(gen_random_string 12)
 trojan_pass=$(gen_random_string 16)
 # 生成 remark，格式：Trojan_年月日时分秒+4位随机数字
-remark="Tro_$(date +%y%m%d%H%M%S)$(gen_random_string 4)"
+remark="Tr_$(date +%y%m%d%H%M%S)$(gen_random_string 2)"
 
 # 默认值（与后端一致）
 listen=""
@@ -88,7 +88,7 @@ if [[ $add_status -eq 0 ]]; then
     echo "Trojan 客户端导入链接如下："
     # 移除 cerfile 和 keyfile 参数，仅保留必要参数
     trojan_url_client="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&alpn=${trojan_alpn}#${remark}"
-    echo "$trojan_url_client"
+    echo "${green}$trojan_url_client"
   
 else
     echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
