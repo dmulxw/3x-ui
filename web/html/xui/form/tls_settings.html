@@ -58,7 +58,14 @@
       <a-switch v-model="inbound.stream.tls.enableSessionResumption"></a-switch>
     </a-form-item>
     <a-form-item label="Server Name To Verify">
-      <a-input v-model.trim="inbound.stream.tls.serverNameToVerify"></a-input>
+      <!-- 修改为 verifyPeerCertInNames，值为数组 -->
+      <a-select
+        v-model="inbound.stream.tls.verifyPeerCertInNames"
+        mode="tags"
+        :dropdown-class-name="themeSwitcher.currentTheme"
+        placeholder="verifyPeerCertInNames (如: dns.google)">
+        <a-select-option v-for="item in inbound.stream.tls.verifyPeerCertInNames" :key="item">[[ item ]]</a-select-option>
+      </a-select>
     </a-form-item>
     <template v-for="cert,index in inbound.stream.tls.certs">
       <a-form-item label='{{ i18n "certificate" }}'>

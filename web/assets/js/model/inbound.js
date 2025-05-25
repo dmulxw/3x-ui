@@ -554,7 +554,7 @@ class TlsStreamSettings extends XrayCommonClass {
         maxVersion = TLS_VERSION_OPTION.TLS13,
         cipherSuites = '',
         rejectUnknownSni = false,
-        serverNameToVerify = 'dns.google',
+        verifyPeerCertInNames = ['dns.google'], // 修改为数组
         disableSystemRoot = false,
         enableSessionResumption = false,
         certificates = [new TlsStreamSettings.Cert()],
@@ -567,7 +567,7 @@ class TlsStreamSettings extends XrayCommonClass {
         this.maxVersion = maxVersion;
         this.cipherSuites = cipherSuites;
         this.rejectUnknownSni = rejectUnknownSni;
-        this.serverNameToVerify = serverNameToVerify;
+        this.verifyPeerCertInNames = verifyPeerCertInNames; // 新字段
         this.disableSystemRoot = disableSystemRoot;
         this.enableSessionResumption = enableSessionResumption;
         this.certs = certificates;
@@ -593,13 +593,22 @@ class TlsStreamSettings extends XrayCommonClass {
         if (!ObjectUtil.isEmpty(json.settings)) {
             settings = new TlsStreamSettings.Settings(json.settings.allowInsecure, json.settings.fingerprint, json.settings.serverName, json.settings.domains);
         }
+        // 兼容旧字段
+        let verifyPeerCertInNames = [];
+        if (Array.isArray(json.verifyPeerCertInNames)) {
+            verifyPeerCertInNames = json.verifyPeerCertInNames;
+        } else if (typeof json.serverNameToVerify === 'string' && json.serverNameToVerify.length > 0) {
+            verifyPeerCertInNames = [json.serverNameToVerify];
+        } else {
+            verifyPeerCertInNames = [];
+        }
         return new TlsStreamSettings(
             json.serverName,
             json.minVersion,
             json.maxVersion,
             json.cipherSuites,
             json.rejectUnknownSni,
-            json.serverNameToVerify,
+            verifyPeerCertInNames,
             json.disableSystemRoot,
             json.enableSessionResumption,
             certs,
@@ -615,7 +624,7 @@ class TlsStreamSettings extends XrayCommonClass {
             maxVersion: this.maxVersion,
             cipherSuites: this.cipherSuites,
             rejectUnknownSni: this.rejectUnknownSni,
-            serverNameToVerify: this.serverNameToVerify,
+            verifyPeerCertInNames: this.verifyPeerCertInNames, // 新字段
             disableSystemRoot: this.disableSystemRoot,
             enableSessionResumption: this.enableSessionResumption,
             certificates: TlsStreamSettings.toJsonArray(this.certs),
