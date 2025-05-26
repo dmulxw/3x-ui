@@ -566,7 +566,14 @@ generate_default_site() {
         if command -v unzip &>/dev/null; then
             unzip -o "$tmpzip" -d "$site_dir"
         else
-            apt-get update && apt-get install -y unzip || yum install -y unzip
+            # 修正：根据系统类型选择解压命令，避免 AlmaLinux 下 apt-get 报错
+            if command -v yum &>/dev/null; then
+                yum install -y unzip
+            elif command -v dnf &>/dev/null; then
+                dnf install -y unzip
+            elif command -v apt-get &>/dev/null; then
+                apt-get update && apt-get install -y unzip
+            fi
             unzip -o "$tmpzip" -d "$site_dir"
         fi
         rm -f "$tmpzip"
