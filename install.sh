@@ -843,7 +843,7 @@ auto_ssl_and_nginx() {
         trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&cerfile=${cerfile}&keyfile=${keyfile}&alpn=${trojan_alpn}#${remark}"
 
         echo -e "${yellow}即将添加的 Trojan 入站链接如下：${plain}"
-        echo "$trojan_url"
+        echo "${green}$trojan_url"
         #echo -e "${yellow}正在添加 Trojan 入站...${plain}"
         add_output=$(/usr/local/x-ui/x-ui setting -AddInbound "$trojan_url" 2>&1)
         add_status=$?
@@ -897,9 +897,100 @@ auto_ssl_and_nginx() {
     fi
 }
 
+check_and_install_firewall() {
+    # 检查并安装防火墙（firewalld/ufw），并开放80、443和panel_port，关闭其他端口
+    local panel_port="$1"
+    local firewall_installed=0
+
+    # 检查 firewalld
+    if command -v firewall-cmd &>/dev/null; then
+        firewall_installed=1
+    fi
+    # 检查 ufw
+    if command -v ufw &>/dev/null; then
+        firewall_installed=1
+    fi
+
+    # 如果都没有，尝试安装
+    if [[ $firewall_installed -eq 0 ]]; then
+        if [[ "${release}" =~ ^(centos|almalinux|rocky|ol)$ ]]; then
+            yum install -y firewalld
+            systemctl enable firewalld
+            systemctl start firewalld
+        elif [[ "${release}" =~ ^(fedora|amzn)$ ]]; then
+            dnf install -y firewalld
+            systemctl enable firewalld
+            systemctl start firewalld
+        elif [[ "${release}" =~ ^(ubuntu|debian|armbian)$ ]]; then
+            apt-get update && apt-get install -y ufw
+            ufw --force enable
+        elif [[ "${release}" =~ ^(arch|manjaro|parch)$ ]]; then
+            pacman -Sy --noconfirm ufw
+            systemctl enable ufw
+            systemctl start ufw
+        elif [[ "${release}" == "opensuse-tumbleweed" ]]; then
+            zypper install -y firewalld
+            systemctl enable firewalld
+            systemctl start firewalld
+        fi
+    fi
+
+    # 再次检测
+    if command -v firewall-cmd &>/dev/null; then
+        # firewalld
+        firewall-cmd --permanent --add-port=80/tcp
+        firewall-cmd --permanent --add-port=443/tcp
+        firewall-cmd --permanent --add-port=${panel_port}/tcp
+        # 关闭除80/443/panel_port以外的所有端口
+        open_ports="80 443 ${panel_port}"
+        current_ports=$(firewall-cmd --list-ports | tr ' ' '\n' | grep '/tcp' | sed 's#/tcp##')
+        for port in $current_ports; do
+            skip=0
+            for keep in $open_ports; do
+                if [[ "$port" == "$keep" ]]; then
+                    skip=1
+                    break
+                fi
+            done
+            if [[ $skip -eq 0 ]]; then
+                firewall-cmd --permanent --remove-port=${port}/tcp
+            fi
+        done
+        firewall-cmd --reload
+    elif command -v ufw &>/dev/null; then
+        # ufw
+        ufw allow 80/tcp
+        ufw allow 443/tcp
+        ufw allow ${panel_port}/tcp
+        # 关闭除80/443/panel_port以外的所有端口
+        open_ports="80 443 ${panel_port}"
+        ufw status numbered | grep ALLOW | awk '{print $2}' | while read port; do
+            skip=0
+            for keep in $open_ports; do
+                if [[ "$port" == "$keep" ]]; then
+                    skip=1
+                    break
+                fi
+            done
+            if [[ $skip -eq 0 ]]; then
+                ufw delete allow $port/tcp
+            fi
+        done
+        ufw --force enable
+    fi
+}
+
 echo -e "${green}Running...${plain}"
 install_base
 install_x-ui $1
+
+# 获取 x-ui 实际端口
+panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
+if [[ -z "$panel_port" ]]; then
+    panel_port="54321"
+fi
+
+check_and_install_firewall "$panel_port"
 
 # 自动化SSL证书、nginx、默认站点、证书路径写入
 auto_ssl_and_nginx
