@@ -144,21 +144,42 @@ install_base() {
             fi
         done
         yum -y update && yum install -y -q wget curl tar tzdata socat
+        if [[ $? -ne 0 ]]; then
+            echo -e "${red}yum/dnf update or install failed, please check your network or yum source.${plain}"
+        fi
         ;;
     fedora | amzn)
         dnf -y update && dnf install -y -q wget curl tar tzdata socat
+        if [[ $? -ne 0 ]]; then
+            echo -e "${red}dnf update or install failed, please check your network or dnf source.${plain}"
+        fi
         ;;
     ubuntu | debian | armbian)
-        apt-get update && apt-get install -y -q wget curl tar tzdata socat
+        apt-get update --fix-missing
+        apt-get install -y -q wget curl tar tzdata socat
+        if [[ $? -ne 0 ]]; then
+            echo -e "${red}apt-get update/install failed, please check your network or apt source.${plain}"
+            echo -e "${yellow}You may try: apt-get update --fix-missing${plain}"
+        fi
         ;;
     arch | manjaro | parch)
         pacman -Syu && pacman -Syu --noconfirm wget curl tar tzdata socat
+        if [[ $? -ne 0 ]]; then
+            echo -e "${red}pacman update/install failed, please check your network or pacman source.${plain}"
+        fi
         ;;
     opensuse-tumbleweed)
         zypper refresh && zypper -q install -y wget curl tar timezone socat
+        if [[ $? -ne 0 ]]; then
+            echo -e "${red}zypper install failed, please check your network or zypper source.${plain}"
+        fi
         ;;
     *)
-        apt-get update && apt install -y -q wget curl tar tzdata socat
+        apt-get update --fix-missing
+        apt install -y -q wget curl tar tzdata socat
+        if [[ $? -ne 0 ]]; then
+            echo -e "${red}apt install failed, please check your network or apt source.${plain}"
+        fi
         ;;
     esac
 }
@@ -236,7 +257,7 @@ config_after_install() {
             if [[ -n "$panel_domain" ]]; then
                 echo -e "${green}Access URL: http://${panel_domain}:${config_port}/${config_webBasePath}${plain}"
             else
-                echo -e "${green}Access URL: http://${server_ip}:${config_port}/${config_webBasePath}${plain}"
+                echo -e "${green}IP Access URL，unsafe without https （不安全，请使用https://方式！）: http://${server_ip}:${config_port}/${config_webBasePath}${plain}"
             fi
             echo -e "###############################################"
             echo -e "${yellow}If you forgot your login info, you can type 'x-ui settings' to check${plain}"
@@ -773,45 +794,53 @@ auto_ssl_and_nginx() {
     local retry=0
     local domain=""
     local email=""
-    while true; do
-        echo -e "${yellow}Please enter the domain name for SSL certificate application (e.g. example.com):${plain}"
-        echo -e "${yellow}请输入用于申请证书的域名（如 example.com）：${plain}"
-        read -r domain < /dev/tty
-        # 域名校验：包含至少一个点且不是首尾，且后缀长度>=2
-        if [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
-            # 保存域名用于后续 config_after_install 输出
-            echo "$domain" > /tmp/xui_panel_domain
-            break
-        else
-            echo -e "${red}Invalid domain format, please try again.${plain}"
-            echo -e "${red}域名格式不正确，请重新输入。${plain}"
-            retry=$((retry+1))
-            if [[ $retry -ge 2 ]]; then
-                echo "Too many input errors, setup aborted."
-                echo "输入错误次数过多，安装中止。"
-                exit 1
+    # 优先从临时文件读取域名和邮箱
+    if [[ -f /tmp/xui_panel_domain ]]; then
+        domain=$(cat /tmp/xui_panel_domain)
+    fi
+    if [[ -f /tmp/xui_panel_email ]]; then
+        email=$(cat /tmp/xui_panel_email)
+    fi
+    # 如果没有则回退到交互输入（理论上不会触发）
+    if [[ -z "$domain" ]]; then
+        while true; do
+            echo -e "${yellow}Please enter the domain name for SSL certificate application (e.g. example.com):${plain}"
+            echo -e "${yellow}请输入用于申请证书的域名（如 example.com）：${plain}"
+            read -r domain < /dev/tty
+            if [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
+                echo "$domain" > /tmp/xui_panel_domain
+                break
+            else
+                echo -e "${red}Invalid domain format, please try again.${plain}"
+                retry=$((retry+1))
+                if [[ $retry -ge 2 ]]; then
+                    echo "Too many input errors, setup aborted."
+                    echo "输入错误次数过多，安装中止。"
+                    exit 1
+                fi
             fi
-        fi
-    done
+        done
+    fi
     retry=0
-    while true; do
-        echo -e "${yellow}Please enter your email address (for Let's Encrypt notifications):${plain}"
-        echo -e "${yellow}请输入联系邮箱（Let's Encrypt 用于通知证书到期）：${plain}"
-        read -r email < /dev/tty
-        # 邮箱校验：包含@和.，且后缀长度>=2
-        if [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
-            break
-        else
-            echo -e "${red}Invalid email format, please try again.${plain}"
-            echo -e "${red}邮箱格式不正确，请重新输入。${plain}"
-            retry=$((retry+1))
-            if [[ $retry -ge 2 ]]; then
-                echo "Too many input errors, setup aborted."
-                echo "输入错误次数过多，安装中止。"
-                exit 1
+    if [[ -z "$email" ]]; then
+        while true; do
+            echo -e "${yellow}Please enter your email address (for Let's Encrypt notifications):${plain}"
+            echo -e "${yellow}请输入联系邮箱（Let's Encrypt 用于通知证书到期）：${plain}"
+            read -r email < /dev/tty
+            if [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+                echo "$email" > /tmp/xui_panel_email
+                break
+            else
+                echo -e "${red}Invalid email format, please try again.${plain}"
+                retry=$((retry+1))
+                if [[ $retry -ge 2 ]]; then
+                    echo "Too many input errors, setup aborted."
+                    echo "输入错误次数过多，安装中止。"
+                    exit 1
+                fi
             fi
-        fi
-    done
+        done
+    fi
     install_acme
     if [ $? -ne 0 ]; then
         echo -e "${red}acme.sh installation failed.${plain}"
@@ -1021,6 +1050,33 @@ auto_ssl_and_nginx() {
 }
 
 echo -e "${green}Running...${plain}"
+
+# 新增：启动时先提示用户输入域名和邮箱，并保存到临时文件，后续直接使用
+domain=""
+email=""
+while true; do
+    echo -e "${yellow}请输入用于申请SSL证书的域名 (如 example.com)：${plain}"
+    echo -e "${yellow}Please enter the domain name for SSL certificate application (e.g. example.com):${plain}"
+    read -r domain
+    if [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
+        echo "$domain" > /tmp/xui_panel_domain
+        break
+    else
+        echo -e "${red}域名格式不正确，请重新输入。Invalid domain format, please try again.${plain}"
+    fi
+done
+while true; do
+    echo -e "${yellow}请输入联系邮箱 (Let's Encrypt 用于通知证书到期)：${plain}"
+    echo -e "${yellow}Please enter your email address (for Let's Encrypt notifications):${plain}"
+    read -r email
+    if [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+        echo "$email" > /tmp/xui_panel_email
+        break
+    else
+        echo -e "${red}邮箱格式不正确，请重新输入。Invalid email format, please try again.${plain}"
+    fi
+done
+
 install_base
 install_x-ui $1
 
