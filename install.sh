@@ -461,7 +461,7 @@ check_firewall_ports() {
         echo -e "${green}已关闭其他端口${plain}"
         echo -e "${green}Open ports: 80, 443, $panel_port, $ssh_port${plain}"
         echo -e "${green}Closed other ports${plain}"
-        fw_hint="firewall-cmd --permanent --add-port=端口号/tcp && firewall-cmd --reload"
+        fw_hint="firewall-cmd --permanent --add-port=端口号(Port Number)/tcp && firewall-cmd --reload"
     elif command -v ufw &>/dev/null; then
         for port in $open_ports; do
             ufw allow $port/tcp
@@ -486,7 +486,7 @@ check_firewall_ports() {
         echo -e "${green}已关闭其他端口${plain}"
         echo -e "${green}Open ports: 80, 443, $panel_port, $ssh_port${plain}"
         echo -e "${green}Closed other ports${plain}"
-        fw_hint="ufw allow 端口号/tcp"
+        fw_hint="ufw allow 端口号(Port Number)/tcp"
     fi
 
     # 新增防火墙提示
@@ -970,11 +970,15 @@ auto_ssl_and_nginx() {
                 ufw --force enable
                 echo -e "${green}已自动开放 Trojan 端口(Open for trojan inbound firewall port  ): $trojan_port (ufw)${plain}"
             fi
+            # 新增：添加Trojan后重启xray
+            if command -v systemctl &>/dev/null; then
+                systemctl restart x-ui
+                echo -e "${green}xray 已重启 (xray restarted after adding trojan inbound)${plain}"
+            fi
         else
             echo -e "${red}Trojan 入站添加失败，返回信息如下(Add trojan inbound)：${plain}"
             echo "$add_output"
         fi
-        systemctl restart x-ui
     fi
 
     # 安装结束后统一输出登录信息。
