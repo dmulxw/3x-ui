@@ -420,47 +420,143 @@ install_x-ui() {
 }
 
 check_firewall_ports() {
-    local need_open=0
-    local close_cmds=""
-    # 检查ufw是否安装并启用
-    if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
-        for port in 80 443; do
-            if ! ufw status | grep -qw "$port"; then
-                ufw allow $port
-                need_open=1
-                close_cmds+="ufw delete allow $port\n"
-            fi
-        done
-        if [[ $need_open -eq 1 ]]; then
-            echo -e "${green}The firewall has automatically opened port 80 and port 443. If you need to close them, please execute:,防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
-        fi
+    # 检查并开放 80, 443, x-ui 面板端口, SSH 端口，关闭其他端口
+    local panel_port
+    panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
+    if [[ -z "$panel_port" ]]; then
+        panel_port="54321"
     fi
+    # 检测SSH端口
+    local ssh_port
+    ssh_port=$(ss -tnlp | grep sshd | awk '{print $4}' | awk -F: '{print $NF}' | grep -E '^[0-9]+$' | head -n1)
+    if [[ -z "$ssh_port" ]]; then
+        ssh_port=22
+    fi
+    local open_ports="80 443 $panel_port $ssh_port"
+    local closed_ports=()
     # firewalld
     if command -v firewall-cmd &>/dev/null && firewall-cmd --state &>/dev/null; then
-        for port in 80 443; do
-            if ! firewall-cmd --list-ports | grep -qw "${port}/tcp"; then
-                firewall-cmd --permanent --add-port=${port}/tcp
-                firewall-cmd --reload
-                need_open=1
-                close_cmds+="firewall-cmd --permanent --remove-port=${port}/tcp && firewall-cmd --reload\n"
+        for port in $open_ports; do
+            firewall-cmd --permanent --add-port=${port}/tcp
+        done
+        # 关闭其他端口
+        current_ports=$(firewall-cmd --list-ports | tr ' ' '\n' | grep '/tcp' | sed 's#/tcp##')
+        for port in $current_ports; do
+            skip=0
+            for keep in $open_ports; do
+                if [[ "$port" == "$keep" ]]; then
+                    skip=1
+                    break
+                fi
+            done
+            if [[ $skip -eq 0 ]]; then
+                firewall-cmd --permanent --remove-port=${port}/tcp
+                closed_ports+=($port)
             fi
         done
-        if [[ $need_open -eq 1 ]]; then
-            echo -e "${green}The firewall has automatically opened port 80 and port 443. If you need to close them, please execute:.防火墙已自动开放80端口和443端口，如需关闭请执行：\n${close_cmds}${plain}"
-        fi
+        firewall-cmd --reload
+        #: ${closed_ports[*]}
+        echo -e "${green}已开放端口: 80, 443, $panel_port, $ssh_port${plain}"
+        echo -e "${green}已关闭其他端口${plain}"
+        echo -e "${green}Open ports: 80, 443, $panel_port, $ssh_port${plain}"
+        echo -e "${green}Closed other ports${plain}"
+    elif command -v ufw &>/dev/null; then
+        for port in $open_ports; do
+            ufw allow $port/tcp
+        done
+        # 关闭其他端口
+        ufw status numbered | grep ALLOW | awk '{print $2}' | while read port; do
+            skip=0
+            for keep in $open_ports; do
+                if [[ "$port" == "$keep" ]]; then
+                    skip=1
+                    break
+                fi
+            done
+            if [[ $skip -eq 0 ]]; then
+                ufw delete allow $port/tcp
+                closed_ports+=($port)
+            fi
+        done
+        ufw --force enable
+        #: ${closed_ports[*]}
+        echo -e "${green}已开放端口: 80, 443, $panel_port, $ssh_port${plain}"
+        echo -e "${green}已关闭其他端口${plain}"
+        echo -e "${green}Open ports: 80, 443, $panel_port, $ssh_port${plain}"
+        echo -e "${green}Closed other ports${plain}"
     fi
-}
 
-check_port_occupied() {
-    for port in 80 443; do
-        local pinfo
-        pinfo=$(lsof -i :$port -sTCP:LISTEN 2>/dev/null | grep -v "COMMAND")
-        if [[ -n "$pinfo" ]]; then
-            echo -e "${red} 端口${port}已被占用，相关进程如下：${plain}"
-            echo "$pinfo"
-            exit 1
+    # 配置 SSH 防护
+    sshd_config="/etc/ssh/sshd_config"
+    if [[ -f "$sshd_config" ]]; then
+        sed -i 's/^#*MaxAuthTries.*/MaxAuthTries 5/' "$sshd_config"
+        sed -i 's/^#*MaxSessions.*/MaxSessions 5/' "$sshd_config"
+        sed -i 's/^#*LoginGraceTime.*/LoginGraceTime 60/' "$sshd_config"
+        grep -q '^MaxAuthTries' "$sshd_config" || echo "MaxAuthTries 5" >> "$sshd_config"
+        grep -q '^MaxSessions' "$sshd_config" || echo "MaxSessions 5" >> "$sshd_config"
+        grep -q '^LoginGraceTime' "$sshd_config" || echo "LoginGraceTime 60" >> "$sshd_config"
+        systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
+        echo -e "${green}已配置SSH防护: MaxAuthTries=5, MaxSessions=5, LoginGraceTime=60${plain}"
+        echo -e "${green}SSH security configured: MaxAuthTries=5, MaxSessions=5, LoginGraceTime=60${plain}"
+    fi
+
+    # 安装并配置Fail2Ban
+    if ! command -v fail2ban-server &>/dev/null; then
+        if [[ "${release}" =~ ^(centos|almalinux|rocky|ol)$ ]]; then
+            yum install -y epel-release
+            yum install -y fail2ban
+        elif [[ "${release}" =~ ^(fedora|amzn)$ ]]; then
+            dnf install -y fail2ban
+        elif [[ "${release}" =~ ^(ubuntu|debian|armbian)$ ]]; then
+            apt-get install -y fail2ban
+        elif [[ "${release}" =~ ^(arch|manjaro|parch)$ ]]; then
+            pacman -Sy --noconfirm fail2ban
+        elif [[ "${release}" == "opensuse-tumbleweed" ]]; then
+            zypper install -y fail2ban
         fi
-    done
+        echo -e "${green}Fail2Ban 已安装 (Fail2Ban installed)${plain}"
+    fi
+    # 配置Fail2Ban
+    if [[ -f /etc/fail2ban/jail.conf ]]; then
+        cp -n /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+        jail_local="/etc/fail2ban/jail.local"
+        # 检查是否已配置sshd
+        if ! grep -q "^\[sshd\]" "$jail_local"; then
+            echo -e "\n[sshd]" >> "$jail_local"
+            echo "enabled = true" >> "$jail_local"
+            echo "port = ssh" >> "$jail_local"
+            echo "filter = sshd" >> "$jail_local"
+            # 日志路径根据系统区分
+            if [[ "${release}" =~ ^(centos|almalinux|rocky|ol|fedora|amzn)$ ]]; then
+                echo "logpath = /var/log/secure" >> "$jail_local"
+            else
+                echo "logpath = /var/log/auth.log" >> "$jail_local"
+            fi
+            echo "maxretry = 5" >> "$jail_local"
+            echo "bantime = 3600" >> "$jail_local"
+            echo "findtime = 600" >> "$jail_local"
+        fi
+        systemctl enable fail2ban
+        systemctl restart fail2ban
+        echo -e "${green}Fail2Ban已配置SSH防护，已启动并设置开机自启。${plain}"
+        echo -e "${green}Fail2Ban SSH protection enabled, started and enabled on boot.${plain}"
+    fi
+
+    # 系统升级
+    if [[ "${release}" =~ ^(centos|almalinux|rocky|ol|fedora|amzn)$ ]]; then
+        dnf update -y
+        echo -e "${green}系统已升级 (System upgraded with dnf update -y)${plain}"
+    elif [[ "${release}" =~ ^(ubuntu|debian|armbian)$ ]]; then
+        apt update && apt upgrade -y
+        echo -e "${green}系统已升级 (System upgraded with apt update && apt upgrade -y)${plain}"
+    fi
+
+    # 设置每日凌晨4点自动重启（如需要）
+    if ! crontab -l 2>/dev/null | grep -q "auto-reboot-4am"; then
+        (crontab -l 2>/dev/null; echo "0 4 * * * /usr/bin/needs-restarting -r &>/dev/null && /sbin/reboot # auto-reboot-4am") | crontab -
+        echo -e "${green}已设置每日凌晨4点自动检查并重启系统（如有必要）。${plain}"
+        echo -e "${green}Auto reboot at 4am if needed is scheduled.${plain}"
+    fi
 }
 
 install_acme() {
@@ -566,14 +662,7 @@ generate_default_site() {
         if command -v unzip &>/dev/null; then
             unzip -o "$tmpzip" -d "$site_dir"
         else
-            # 修正：根据系统类型选择解压命令，避免 AlmaLinux 下 apt-get 报错
-            if command -v yum &>/dev/null; then
-                yum install -y unzip
-            elif command -v dnf &>/dev/null; then
-                dnf install -y unzip
-            elif command -v apt-get &>/dev/null; then
-                apt-get update && apt-get install -y unzip
-            fi
+            apt-get update && apt-get install -y unzip || yum install -y unzip
             unzip -o "$tmpzip" -d "$site_dir"
         fi
         rm -f "$tmpzip"
@@ -663,10 +752,10 @@ EOF
 }
 
 auto_ssl_and_nginx() {
-    # 检查防火墙
-    check_firewall_ports
     # 检查端口占用
     check_port_occupied
+    # 检查防火墙
+    check_firewall_ports
     # 申请证书
     local retry=0
     local domain=""
@@ -818,44 +907,69 @@ auto_ssl_and_nginx() {
     # 安装并配置nginx，传递实际证书路径
     install_nginx_with_cert "$domain" "$cert_file" "$key_file"
 
-    # 新增：自动添加 Trojan 入站（完全复用 add_inbound.sh 逻辑）
-    trojan_url_client=""
+    # 新增：自动添加 Trojan 入站
     if [[ -n "$cert_file" && -n "$key_file" ]]; then
-        # 生成参数 domain实际需要根据当前主机的域名
-        #domain="${domain:-doyousee.icu}"
+        # 生成随机端口（10000-60000）、用户名、密码
         trojan_port=$(shuf -i 10000-60000 -n 1)
-        trojan_user=$(gen_random_string 12)
+        trojan_user=$(gen_random_string 8)
         trojan_pass=$(gen_random_string 16)
-        # remark 格式：Trojan_年月日时分秒+4位随机数字
-        remark="Tr_$(date +%y%m%d%H%M%S)$(gen_random_string 2)"
-        listen=""
-        protocol="trojan"
-        alpn_default="h3%2Ch2%2Chttp%2F1.1"
-        network_default="tcp"
-        security_default="tls"
-        fp_default="chrome"
-        trojan_alpn="${alpn_default}"
-        trojan_network="${network_default}"
-        trojan_security="${security_default}"
-        trojan_fp="${fp_default}"
-        cerfile="$cert_file"
-        keyfile="$key_file"
-        trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&cerfile=${cerfile}&keyfile=${keyfile}&alpn=${trojan_alpn}#${remark}"
-
-        echo -e "${yellow}即将添加的 Trojan 入站链接如下：${plain}"
-        echo "${green}$trojan_url"
-        #echo -e "${yellow}正在添加 Trojan 入站...${plain}"
-        add_output=$(/usr/local/x-ui/x-ui setting -AddInbound "$trojan_url" 2>&1)
+        # 构造入站 JSON，ALPN为h3,h2,http/1.1
+        inbound_json=$(cat <<EOF
+{
+  "remark": "FirstTrojan",
+  "enable": true,
+  "listen": "",
+  "port": $trojan_port,
+  "protocol": "trojan",
+  "settings": {
+    "clients": [
+      {
+        "email": "$trojan_user",
+        "password": "$trojan_pass"
+      }
+    ]
+  },
+  "streamSettings": {
+    "network": "tcp",
+    "security": "tls",
+    "tlsSettings": {
+      "certificates": [
+        {
+          "certificateFile": "$cert_file",
+          "keyFile": "$key_file"
+        }
+      ],
+      "alpn": ["h3","h2","http/1.1"]
+    }
+  }
+}
+EOF
+)
+        # 添加入站并检测返回状态
+        add_output=$(/usr/local/x-ui/x-ui add-inbound -json "$inbound_json" 2>&1)
         add_status=$?
         if [[ $add_status -eq 0 ]]; then
-            echo "$add_output"
-            trojan_url_client="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&alpn=${trojan_alpn}#${remark}"
+            echo -e "${green}Trojan 入站已自动添加，信息如下：${plain}"
             echo "---------------------------------------------"
-            
+            echo "Remark: FirstTrojan"
+            echo "Protocol: trojan"
+            echo "Port: $trojan_port"
+            echo "Username: $trojan_user"
+            echo "Password: $trojan_pass"
+            echo "TLS: enabled"
+            echo "Certificate: $cert_file"
+            echo "Key: $key_file"
+            echo "ALPN: h3,h2,http/1.1"
+            echo "---------------------------------------------"
+            # 生成 trojan:// 协议链接
+            trojan_domain="$domain"
+            trojan_remark="FirstTrojan"
+            trojan_remark_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('FirstTrojan'))" 2>/dev/null || echo "FirstTrojan")
+            trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
+            trojan_url="trojan://${trojan_pass}@${trojan_domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark_url}"
         else
             echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
             echo "$add_output"
-            echo "---------------------------------------------"
         fi
         systemctl restart x-ui
     fi
@@ -888,109 +1002,18 @@ auto_ssl_and_nginx() {
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Trojan-Qt5-Windows.7z"
     echo "https://github.com/dmulxw/3x-ui/releases/download/trojan/Igniter-trajon-app-Android-release.apk"
     # 输出 trojan 协议链接
-    if [[ -n "$trojan_url_client" ]]; then
+    if [[ -n "$trojan_url" ]]; then
         echo ""
         echo -e "${green}Trojan 客户端导入链接如下：${plain}"
         echo -e "${green}Trojan Client app import link：${plain}"
-        echo "${green}$trojan_url_client"
+        echo "$trojan_url"
         echo ""
-    fi
-}
-
-check_and_install_firewall() {
-    # 检查并安装防火墙（firewalld/ufw），并开放80、443和panel_port，关闭其他端口
-    local panel_port="$1"
-    local firewall_installed=0
-
-    # 检查 firewalld
-    if command -v firewall-cmd &>/dev/null; then
-        firewall_installed=1
-    fi
-    # 检查 ufw
-    if command -v ufw &>/dev/null; then
-        firewall_installed=1
-    fi
-
-    # 如果都没有，尝试安装
-    if [[ $firewall_installed -eq 0 ]]; then
-        if [[ "${release}" =~ ^(centos|almalinux|rocky|ol)$ ]]; then
-            yum install -y firewalld
-            systemctl enable firewalld
-            systemctl start firewalld
-        elif [[ "${release}" =~ ^(fedora|amzn)$ ]]; then
-            dnf install -y firewalld
-            systemctl enable firewalld
-            systemctl start firewalld
-        elif [[ "${release}" =~ ^(ubuntu|debian|armbian)$ ]]; then
-            apt-get update && apt-get install -y ufw
-            ufw --force enable
-        elif [[ "${release}" =~ ^(arch|manjaro|parch)$ ]]; then
-            pacman -Sy --noconfirm ufw
-            systemctl enable ufw
-            systemctl start ufw
-        elif [[ "${release}" == "opensuse-tumbleweed" ]]; then
-            zypper install -y firewalld
-            systemctl enable firewalld
-            systemctl start firewalld
-        fi
-    fi
-
-    # 再次检测
-    if command -v firewall-cmd &>/dev/null; then
-        # firewalld
-        firewall-cmd --permanent --add-port=80/tcp
-        firewall-cmd --permanent --add-port=443/tcp
-        firewall-cmd --permanent --add-port=${panel_port}/tcp
-        # 关闭除80/443/panel_port以外的所有端口
-        open_ports="80 443 ${panel_port}"
-        current_ports=$(firewall-cmd --list-ports | tr ' ' '\n' | grep '/tcp' | sed 's#/tcp##')
-        for port in $current_ports; do
-            skip=0
-            for keep in $open_ports; do
-                if [[ "$port" == "$keep" ]]; then
-                    skip=1
-                    break
-                fi
-            done
-            if [[ $skip -eq 0 ]]; then
-                firewall-cmd --permanent --remove-port=${port}/tcp
-            fi
-        done
-        firewall-cmd --reload
-    elif command -v ufw &>/dev/null; then
-        # ufw
-        ufw allow 80/tcp
-        ufw allow 443/tcp
-        ufw allow ${panel_port}/tcp
-        # 关闭除80/443/panel_port以外的所有端口
-        open_ports="80 443 ${panel_port}"
-        ufw status numbered | grep ALLOW | awk '{print $2}' | while read port; do
-            skip=0
-            for keep in $open_ports; do
-                if [[ "$port" == "$keep" ]]; then
-                    skip=1
-                    break
-                fi
-            done
-            if [[ $skip -eq 0 ]]; then
-                ufw delete allow $port/tcp
-            fi
-        done
-        ufw --force enable
     fi
 }
 
 echo -e "${green}Running...${plain}"
 install_base
 install_x-ui $1
-
-# 获取 x-ui 实际端口
-panel_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
-if [[ -z "$panel_port" ]]; then
-    panel_port="54321"
-fi
-
-check_and_install_firewall "$panel_port"
 
 # 自动化SSL证书、nginx、默认站点、证书路径写入
 auto_ssl_and_nginx
