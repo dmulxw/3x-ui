@@ -434,6 +434,7 @@ check_firewall_ports() {
     fi
     local open_ports="80 443 $panel_port $ssh_port"
     local closed_ports=()
+    local fw_hint=""
     # firewalld
     if command -v firewall-cmd &>/dev/null && firewall-cmd --state &>/dev/null; then
         for port in $open_ports; do
@@ -460,6 +461,7 @@ check_firewall_ports() {
         echo -e "${green}已关闭其他端口${plain}"
         echo -e "${green}Open ports: 80, 443, $panel_port, $ssh_port${plain}"
         echo -e "${green}Closed other ports${plain}"
+        fw_hint="firewall-cmd --permanent --add-port=端口号/tcp && firewall-cmd --reload"
     elif command -v ufw &>/dev/null; then
         for port in $open_ports; do
             ufw allow $port/tcp
@@ -484,6 +486,15 @@ check_firewall_ports() {
         echo -e "${green}已关闭其他端口${plain}"
         echo -e "${green}Open ports: 80, 443, $panel_port, $ssh_port${plain}"
         echo -e "${green}Closed other ports${plain}"
+        fw_hint="ufw allow 端口号/tcp"
+    fi
+
+    # 新增防火墙提示
+    if [[ -n "$fw_hint" ]]; then
+        echo -e "${yellow}如果增加trojan inbound线路，请自行开启对应的防火墙端口！开启命令为：${plain}"
+        echo -e "${yellow}${fw_hint}${plain}"
+        echo -e "${yellow}If you add a trojan inbound, please open the corresponding firewall port manually! Command:${plain}"
+        echo -e "${yellow}${fw_hint}${plain}"
     fi
 
     # 配置 SSH 防护
@@ -907,52 +918,34 @@ auto_ssl_and_nginx() {
     # 安装并配置nginx，传递实际证书路径
     install_nginx_with_cert "$domain" "$cert_file" "$key_file"
 
-    # 新增：自动添加 Trojan 入站
+    # 新增：自动添加 Trojan 入站（与 add_inbound.sh 保持一致）
     if [[ -n "$cert_file" && -n "$key_file" ]]; then
-        # 生成随机端口（10000-60000）、用户名、密码
         trojan_port=$(shuf -i 10000-60000 -n 1)
-        trojan_user=$(gen_random_string 8)
+        trojan_user=$(gen_random_string 12)
         trojan_pass=$(gen_random_string 16)
-        # 构造入站 JSON，ALPN为h3,h2,http/1.1
-        inbound_json=$(cat <<EOF
-{
-  "remark": "FirstTrojan",
-  "enable": true,
-  "listen": "",
-  "port": $trojan_port,
-  "protocol": "trojan",
-  "settings": {
-    "clients": [
-      {
-        "email": "$trojan_user",
-        "password": "$trojan_pass"
-      }
-    ]
-  },
-  "streamSettings": {
-    "network": "tcp",
-    "security": "tls",
-    "tlsSettings": {
-      "certificates": [
-        {
-          "certificateFile": "$cert_file",
-          "keyFile": "$key_file"
-        }
-      ],
-      "alpn": ["h3","h2","http/1.1"]
-    }
-  }
-}
-EOF
-)
-        # 添加入站并检测返回状态
-        add_output=$(/usr/local/x-ui/x-ui add-inbound -json "$inbound_json" 2>&1)
+        remark="Tr_$(date +%y%m%d%H%M%S)$(gen_random_string 2)"
+        protocol="trojan"
+        alpn_default="h3%2Ch2%2Chttp%2F1.1"
+        network_default="tcp"
+        security_default="tls"
+        fp_default="chrome"
+        trojan_alpn="${alpn_default}"
+        trojan_network="${network_default}"
+        trojan_security="${security_default}"
+        trojan_fp="${fp_default}"
+        cerfile="$cert_file"
+        keyfile="$key_file"
+        trojan_url="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&cerfile=${cerfile}&keyfile=${keyfile}&alpn=${trojan_alpn}#${remark}"
+
+        echo -e "${yellow}正在添加 Trojan 入站...${plain}"
+        add_output=$(/usr/local/x-ui/x-ui setting -AddInbound "$trojan_url" 2>&1)
         add_status=$?
         if [[ $add_status -eq 0 ]]; then
+            echo "$add_output"
             echo -e "${green}Trojan 入站已自动添加，信息如下：${plain}"
             echo "---------------------------------------------"
-            echo "Remark: FirstTrojan"
-            echo "Protocol: trojan"
+            echo "Remark: $remark"
+            echo "Protocol: $protocol"
             echo "Port: $trojan_port"
             echo "Username: $trojan_user"
             echo "Password: $trojan_pass"
@@ -961,14 +954,24 @@ EOF
             echo "Key: $key_file"
             echo "ALPN: h3,h2,http/1.1"
             echo "---------------------------------------------"
-            # 生成 trojan:// 协议链接
-            trojan_domain="$domain"
-            trojan_remark="FirstTrojan"
-            trojan_remark_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('FirstTrojan'))" 2>/dev/null || echo "FirstTrojan")
-            trojan_alpn="h3%2Ch2%2Chttp%2F1.1"
-            trojan_url="trojan://${trojan_pass}@${trojan_domain}:${trojan_port}?type=tcp&security=tls&fp=chrome&alpn=${trojan_alpn}#${trojan_remark_url}"
+            trojan_url_client="trojan://${trojan_pass}@${domain}:${trojan_port}?type=${trojan_network}&security=${trojan_security}&fp=${trojan_fp}&alpn=${trojan_alpn}#${remark}"
+            echo ""
+            echo -e "${green}Trojan 客户端导入链接如下：${plain}"
+            echo -e "${green}Trojan Client app import link：${plain}"
+            echo "$trojan_url_client"
+            echo ""
+            # 自动开放 Trojan 端口
+            if command -v firewall-cmd &>/dev/null && firewall-cmd --state &>/dev/null; then
+                firewall-cmd --permanent --add-port=${trojan_port}/tcp
+                firewall-cmd --reload
+                echo -e "${green}已自动开放 Trojan 端口(Open for trojan inbound firewall port  ): $trojan_port (firewalld)${plain}"
+            elif command -v ufw &>/dev/null; then
+                ufw allow ${trojan_port}/tcp
+                ufw --force enable
+                echo -e "${green}已自动开放 Trojan 端口(Open for trojan inbound firewall port  ): $trojan_port (ufw)${plain}"
+            fi
         else
-            echo -e "${red}Trojan 入站添加失败，返回信息如下：${plain}"
+            echo -e "${red}Trojan 入站添加失败，返回信息如下(Add trojan inbound)：${plain}"
             echo "$add_output"
         fi
         systemctl restart x-ui
