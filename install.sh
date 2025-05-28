@@ -410,7 +410,7 @@ install_x-ui() {
         echo -e "${green}Port: ${port}${plain}"
         echo -e "${green}WebBasePath: ${webBasePathClean}${plain}"
         echo -e "${green}Access URL: http://${server_ip}:${port}/${webBasePathClean}${plain}"
-        echo -e "${green}Access URL: http://${server_ip}:${port}/${webBasePathClean}${plain}"
+        echo -e "${green}IP 访问链接（不安全，请使用https://方式！）: http://${server_ip}:${port}/${webBasePathClean}${plain}"
         echo -e "${yellow}It is not safe to access VPN using only IP address. Please use https domain name to increase security. Next, please prepare domain name and email to apply for acme SSL certificate!${plain}"
         if [[ -n "$panel_domain" ]]; then
             echo -e "${green}Access URL: http://${panel_domain}:${port}/${webBasePathClean}${plain}"
